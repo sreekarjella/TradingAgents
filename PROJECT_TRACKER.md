@@ -2,7 +2,7 @@
 
 > **Owner**: Sreekar
 > **Started**: 2026-05-09
-> **Status**: 🟢 Phase 0 — COMPLETE ✅
+> **Status**: 🟢 Phase 1 — India Adaptation (near-complete)
 > **Repo Base**: [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) v0.2.4
 
 ---
@@ -27,16 +27,17 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | Deep think model | `qwen3:32b` | Best tool-calling + reasoning combo locally | 2026-05-09 |
 | Quick think model | `qwen3:14b` | Fast, solid for analysts and debates | 2026-05-09 |
 | Data vendor | yfinance (default) | Free, supports `.NS`/`.BO` Indian tickers | 2026-05-09 |
-| Benchmark index | TBD — `^NSEI` (NIFTY 50) | Replace SPY for alpha calculation | — |
+| Benchmark index | `^NSEI` (NIFTY 50) | Configurable via `benchmark_ticker` | 2026-05-09 |
+| India news sources | India RSS (ET, MC, LM) | 6 feeds, `india_rss` vendor, yfinance fallback | 2026-05-09 |
+| India market tools | India VIX + FII/DII | VIX via yfinance, FII/DII via NSE API | 2026-05-09 |
 | Broker (paper) | TBD | — | — |
 | Broker (real) | TBD | Zerodha / Angel One / Fyers shortlisted | — |
-| Indian news sources | TBD | — | — |
 
 ---
 
 ## 🗺️ Phases & Milestones
 
-### Phase 0: Setup & Validation ← **CURRENT**
+### Phase 0: Setup & Validation ✅ COMPLETE
 > Get the repo running locally with Ollama, test with an Indian stock
 
 - [x] Clone TradingAgents repo
@@ -53,15 +54,18 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 - [x] Validate: full pipeline end-to-end (market analyst only) ✅ ~20 min runtime
 - [x] Document what works and what breaks ✅ (see test results below)
 
-### Phase 1: India Adaptation ← **CURRENT**
+### Phase 1: India Adaptation ← **CURRENT** (near-complete)
 > Modify the framework to be India-market-aware
 
 - [x] Fix ticker handling for `.NS`/`.BO` suffix (already works via `build_instrument_context`)
 - [x] Replace SPY benchmark with NIFTY 50 (`^NSEI`) — configurable via `benchmark_ticker`
 - [x] Add India-centric global news queries (RBI, FII/DII, geopolitics) — via `global_news_queries`
-- [ ] Add Indian news sources (Economic Times, Moneycontrol, LiveMint RSS)
+- [x] Add Indian news sources (Economic Times, Moneycontrol, LiveMint RSS) — `india_news.py`, 6 feeds, 26 tests ✅
 - [x] Add India-specific context to analyst prompts (SEBI, circuit limits, T+1) — via `market_context`
-- [ ] Add India VIX, FII/DII flow data
+- [x] Add India VIX data — via yfinance `^INDIAVIX`, mood interpretation (Low→High)
+- [x] Add FII/DII flow data — via NSE API with session cookie handling, graceful fallback
+- [x] Wire India tools into market_analyst + news_analyst (auto-detected from config)
+- [x] Config: `india_rss,yfinance` news fallback chain in `config_india.py`
 - [ ] Test with 10-15 popular NSE stocks (RELIANCE, TCS, INFY, HDFCBANK, etc.)
 - [ ] Tune debate rounds and prompt quality
 
@@ -128,6 +132,9 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | 2026-05-09 | RELIANCE.NS | Phase 0 | ✅ SELL | Full pipeline: market analyst→debate→trader→risk→PM. ~20 min runtime. |
 | 2026-05-09 | RELIANCE.NS | Data test | ✅ PASS | yfinance price/fundamentals/news all work via Walmart proxy |
 | 2026-05-09 | RELIANCE.NS | Phase 1 | ✅ UNDERWEIGHT | India-adapted pipeline: NIFTY 50 bench, India news, market context. JioMart losses, D/E cited |
+| 2026-05-09 | — | India RSS | ✅ 26/26 tests | ET, Moneycontrol, LiveMint RSS feeds. 30 company name mappings. |
+| 2026-05-09 | — | India VIX | ✅ builds OK | yfinance `^INDIAVIX`, mood interpretation, 5-day trend table |
+| 2026-05-09 | — | FII/DII | ✅ builds OK | NSE API with session cookies, fallback message with manual links |
 
 ---
 
@@ -148,6 +155,9 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | 2026-05-09 | Use Ollama local LLMs instead of paid APIs | Zero cost for paper trading phase, M4 Pro 48GB can handle Qwen3:32b |
 | 2026-05-09 | Cannot use Walmart Element/Code Puppy LLMs | Personal project — must use personal infra only |
 | 2026-05-09 | Qwen3:32b for deep think, Qwen3:14b for quick think | Best tool-calling + reasoning at this RAM budget |
+| 2026-05-09 | Configurable benchmark, not hardcoded India | Keep framework market-agnostic; India is a config overlay |
+| 2026-05-09 | India RSS as fallback chain (`india_rss,yfinance`) | RSS feeds are free + India-specific; yfinance as safety net |
+| 2026-05-09 | Delegate news module to python-programmer agent | Parallel workstreams: agent built RSS while laila built VIX/FII |
 
 ---
 
@@ -159,8 +169,9 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | Yahoo Finance blocked on Walmart DNS | yfinance can't fetch data | Use HTTP_PROXY + NO_PROXY for localhost in .env |
 | Ollama 500 errors intermittent | Pipeline retries/slows | Context length or thinking tokens; monitor and tune |
 | ~20 min per run (1 analyst) | Slow for daily use | Optimize: fewer debate rounds, smaller context, or faster model |
-| yfinance Indian news quality is limited | Poor sentiment analysis | Add dedicated Indian news APIs in Phase 1 |
+| yfinance Indian news quality is limited | Poor sentiment analysis | ✅ Mitigated: India RSS feeds (ET, MC, LM) added |
 | Insider transaction data spotty for Indian stocks | Weak fundamentals analysis | Add NSE bulk deal data |
+| NSE API requires session cookies | FII/DII data fragile | Built cookie-based session handler + fallback links |
 | LLMs can hallucinate financial data | Bad trade decisions | Multi-agent debate catches most errors; memory system self-corrects |
 | Market hours mismatch (IST vs UTC) | Wrong timing for trades | Add IST-aware scheduling in Phase 2 |
 | SEBI regulation changes for algo trading | Legal risk | Monitor SEBI circulars, start with manual approval step |
@@ -180,4 +191,26 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 
 ---
 
-*Last updated: 2026-05-09*
+## 🏗️ Files Added/Modified in Phase 1
+
+| File | Type | Lines | Description |
+|---|---|---|---|
+| `tradingagents/config_india.py` | New | 45 | Pre-built India config (NIFTY 50, news queries, market context) |
+| `tradingagents/dataflows/india_news.py` | New | 186 | RSS news from ET, Moneycontrol, LiveMint (6 feeds) |
+| `tradingagents/dataflows/india_market_data.py` | New | 247 | India VIX + FII/DII data fetching |
+| `tradingagents/agents/utils/india_market_tools.py` | New | 56 | LangChain tool wrappers for VIX + FII/DII |
+| `tests/test_india_news.py` | New | ~150 | 26 unit tests for India RSS module |
+| `tradingagents/default_config.py` | Modified | +5 | Added benchmark_ticker, benchmark_name, market_context, global_news_queries |
+| `tradingagents/graph/trading_graph.py` | Modified | +2 | SPY → config benchmark_ticker |
+| `tradingagents/graph/reflection.py` | Modified | +3 | Dynamic benchmark name in alpha calc |
+| `tradingagents/dataflows/yfinance_news.py` | Modified | +8 | Config-driven global news queries |
+| `tradingagents/dataflows/interface.py` | Modified | +4 | Registered india_rss vendor |
+| `tradingagents/agents/utils/agent_utils.py` | Modified | +5 | market_context injection |
+| `tradingagents/agents/analysts/market_analyst.py` | Modified | +13 | Auto-inject India VIX + FII/DII tools |
+| `tradingagents/agents/analysts/news_analyst.py` | Modified | +13 | Auto-inject India VIX + FII/DII tools |
+| `test_smoke.py` | Modified | — | Updated for India config |
+| `test_multi_india.py` | New | 105 | Batch test for 10 NSE blue-chips |
+
+---
+
+*Last updated: 2026-05-09T19:30 IST*
