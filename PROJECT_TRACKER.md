@@ -178,7 +178,7 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Ollama registry blocked on Walmart network | Can't pull models on VPN | Pull models off-network; they run locally once cached |
-| Yahoo Finance blocked on Walmart DNS | yfinance can't fetch data | Use HTTP_PROXY + NO_PROXY for localhost in .env |
+| Yahoo Finance blocked on Walmart DNS | yfinance can't fetch data | Auto-detect via `network.py` — proxy on Walmart, direct at home |
 | Ollama 500 errors intermittent | Pipeline retries/slows | Context length or thinking tokens; monitor and tune |
 | ~20 min per run (1 analyst) | Slow for daily use | Optimize: fewer debate rounds, smaller context, or faster model |
 | yfinance Indian news quality is limited | Poor sentiment analysis | ✅ Mitigated: India RSS feeds (ET, MC, LM) added |
@@ -218,7 +218,8 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | `tradingagents/trading/paper_broker.py` | New | 361 | SQLite paper trading (real prices, virtual execution) |
 | `tradingagents/trading/angel_one.py` | New | 283 | Angel One SmartAPI (auth, LTP, orders, holdings, funds) |
 | `tradingagents/trading/portfolio.py` | New | 116 | P&L reports, daily snapshots, markdown output |
-| `.env` | Modified | +4 | Angel One credential placeholders |
+| `tradingagents/network.py` | New | 65 | Auto-detect Walmart vs home network, proxy management |
+| `.env` | Modified | +4 | Angel One creds (no hardcoded proxy — auto-detected) |
 | `.gitignore` | Modified | +2 | Exclude `data/` (SQLite DB) |
 
 ### Phase 1: India Adaptation
