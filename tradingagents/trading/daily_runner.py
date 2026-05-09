@@ -1,11 +1,17 @@
-"""Daily trading runner — orchestrates pipeline → executor → portfolio.
+"""Daily trading runner — orchestrates pre-screen → pipeline → executor → portfolio.
 
-Usage:
-    python -m tradingagents.trading.daily_runner
+Usage::
 
-Or from code:
+    python -m tradingagents.trading.daily_runner                # pre-screen → top 5
+    python -m tradingagents.trading.daily_runner --no-screen    # old behavior (first 5)
+    python -m tradingagents.trading.daily_runner --dry-run      # analyze only
+    python -m tradingagents.trading.daily_runner --candidates=7 # screen top 7
+    python -m tradingagents.trading.daily_runner --max-positions=8
+
+Or from code::
+
     from tradingagents.trading.daily_runner import run_daily
-    results = run_daily(config)
+    results = run_daily(broker, graph)
 """
 
 from __future__ import annotations
@@ -15,21 +21,17 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from tradingagents.agents.utils.rating import parse_rating
-
 from .broker import BrokerInterface, Order
 from .executor import TradeAction, execute_trade, resolve_trade
 from .portfolio import daily_pnl_report, portfolio_report
+from .pre_screener import NIFTY_50, ScreenResult, pre_screen
 
 logger = logging.getLogger(__name__)
 
-# Default NIFTY 50 blue-chips for scanning
-DEFAULT_UNIVERSE = [
-    "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS",
-    "HINDUNILVR.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "KOTAKBANK.NS",
-    "LT.NS", "AXISBANK.NS", "BAJFINANCE.NS", "MARUTI.NS", "TITAN.NS",
-    "SUNPHARMA.NS", "TATAMOTORS.NS", "ONGC.NS", "NTPC.NS", "POWERGRID.NS",
-]
+# ── Defaults ─────────────────────────────────────────────────────────────
+DEFAULT_UNIVERSE = NIFTY_50
+MAX_POSITIONS = 10       # Hard cap on portfolio positions
+DEFAULT_CANDIDATES = 5   # How many new candidates the screener picks
 
 
 @dataclass
@@ -50,6 +52,7 @@ class DailyReport:
 
     date: str
     results: list[RunResult] = field(default_factory=list)
+    screen_results: list[ScreenResult] = field(default_factory=list)
     portfolio_summary: str = ""
     pnl_summary: str = ""
     total_duration_secs: float = 0.0
@@ -113,6 +116,16 @@ def run_single(
         )
 
 
+def _count_active_positions(broker: BrokerInterface) -> int:
+    """Return the number of currently held positions."""
+    return len(broker.get_holdings())
+
+
+def _available_buy_slots(broker: BrokerInterface, max_positions: int) -> int:
+    """How many new stocks we can buy before hitting the cap."""
+    return max(0, max_positions - _count_active_positions(broker))
+
+
 def run_daily(
     broker: BrokerInterface,
     graph,
@@ -120,25 +133,32 @@ def run_daily(
     trade_date: Optional[str] = None,
     dry_run: bool = False,
     review_holdings: bool = True,
+    max_positions: int = MAX_POSITIONS,
+    num_candidates: int = DEFAULT_CANDIDATES,
+    use_screener: bool = True,
 ) -> DailyReport:
-    """Run the full daily trading cycle.
+    """Run the full daily trading cycle with intelligent pre-screening.
 
     Steps:
-        1. Review existing holdings (re-analyze, sell if needed)
-        2. Scan universe for new opportunities
-        3. Take daily snapshot
-        4. Generate report
+        1. Pre-screen all 50 NIFTY stocks (fast, no LLM) → pick top N
+        2. Review existing holdings → sell if Underweight/Sell
+        3. Analyze new candidates (only if portfolio has room)
+        4. Take daily snapshot
+        5. Generate report
 
     Args:
         broker: Broker implementation (paper or live).
         graph: TradingAgentsGraph instance.
-        universe: List of tickers to scan. Defaults to top NIFTY 50.
+        universe: Full list of tickers to scan. Defaults to NIFTY 50.
         trade_date: Override date (YYYY-MM-DD). Defaults to today.
         dry_run: If True, resolve trades but don't execute.
         review_holdings: If True, re-analyze existing positions first.
+        max_positions: Maximum portfolio positions (default 10).
+        num_candidates: How many new tickers the screener picks (default 5).
+        use_screener: If False, skip pre-screening (use first N of universe).
 
     Returns:
-        DailyReport with all results and portfolio summary.
+        DailyReport with all results, screen results, and portfolio summary.
     """
     trade_date = trade_date or datetime.now().strftime("%Y-%m-%d")
     universe = universe or DEFAULT_UNIVERSE
@@ -150,9 +170,11 @@ def run_daily(
     logger.info("🐶 DAILY TRADING RUN — %s", trade_date)
     logger.info("=" * 60)
     logger.info("Mode: %s", "DRY RUN" if dry_run else "LIVE EXECUTION")
-    logger.info("Universe: %d tickers", len(universe))
+    logger.info("Max positions: %d | New candidates: %d", max_positions, num_candidates)
+    logger.info("Universe: %d tickers | Screener: %s", len(universe), "ON" if use_screener else "OFF")
 
-    # Step 1: Review existing holdings
+    # ── Step 1: Review existing holdings ─────────────────────────────
+    held_tickers: set[str] = set()
     if review_holdings:
         holdings = broker.get_holdings()
         held_tickers = {h.ticker for h in holdings}
@@ -163,26 +185,56 @@ def run_daily(
                 result = run_single(ticker, broker, graph, trade_date, dry_run)
                 report.results.append(result)
 
-            # Remove held tickers from scan universe (already analyzed)
-            universe = [t for t in universe if t not in held_tickers]
+    # Re-check position count (sells during review may have freed slots)
+    buy_slots = _available_buy_slots(broker, max_positions)
+    logger.info("\n📊 Portfolio: %d positions, %d buy slots available",
+                _count_active_positions(broker), buy_slots)
 
-    # Step 2: Scan universe for new opportunities
-    logger.info("\n🔍 Scanning %d tickers for opportunities...", len(universe))
-    for ticker in universe:
-        result = run_single(ticker, broker, graph, trade_date, dry_run)
-        report.results.append(result)
+    if buy_slots <= 0:
+        logger.info("Portfolio full (%d/%d positions) — skipping new candidates",
+                     _count_active_positions(broker), max_positions)
+    else:
+        # ── Step 2: Pick candidates (screener or static) ─────────────
+        # Only pick as many candidates as we have room for
+        effective_candidates = min(num_candidates, buy_slots)
 
-    # Step 3: Daily snapshot
+        if use_screener:
+            logger.info("\n🔍 Pre-screening %d tickers to find top %d...",
+                        len(universe), effective_candidates)
+            screen_results = pre_screen(
+                universe=universe,
+                top_n=effective_candidates,
+                trade_date=trade_date,
+                exclude=held_tickers,
+            )
+            report.screen_results = screen_results
+            candidates = [r.ticker for r in screen_results]
+        else:
+            candidates = [t for t in universe if t not in held_tickers][:effective_candidates]
+
+        # ── Step 3: Run pipeline on candidates ───────────────────────
+        logger.info("\n🎯 Analyzing %d candidates: %s", len(candidates), ", ".join(candidates))
+        for ticker in candidates:
+            result = run_single(ticker, broker, graph, trade_date, dry_run)
+            report.results.append(result)
+
+            # Re-check slots after each trade (a Buy consumes a slot)
+            if not dry_run and result.order and result.order.side == "BUY" and result.order.status == "FILLED":
+                remaining = _available_buy_slots(broker, max_positions)
+                if remaining <= 0:
+                    logger.info("Portfolio now full (%d positions) — stopping candidate scan", max_positions)
+                    break
+
+    # ── Step 4: Daily snapshot ───────────────────────────────────────
     from .paper_broker import PaperBroker
     if isinstance(broker, PaperBroker):
         broker.take_daily_snapshot()
 
-    # Step 4: Generate reports
+    # ── Step 5: Generate reports ─────────────────────────────────────
     report.portfolio_summary = portfolio_report(broker)
     report.pnl_summary = daily_pnl_report(broker)
     report.total_duration_secs = (datetime.now() - start).total_seconds()
 
-    # Log summary
     _log_daily_summary(report)
 
     return report
@@ -194,12 +246,19 @@ def _log_daily_summary(report: DailyReport) -> None:
     logger.info("📊 DAILY SUMMARY — %s", report.date)
     logger.info("=" * 60)
 
+    # Pre-screen results
+    if report.screen_results:
+        logger.info("\n🔍 Pre-screen picks:")
+        for i, sr in enumerate(report.screen_results, 1):
+            reasons = ", ".join(sr.reasons) if sr.reasons else "baseline"
+            logger.info("  %d. %s — score %.1f (%s)", i, sr.ticker, sr.total_score, reasons)
+
     # Count by rating
-    ratings = {}
+    ratings: dict[str, int] = {}
     for r in report.results:
         ratings[r.rating] = ratings.get(r.rating, 0) + 1
 
-    logger.info("Ratings: %s", " | ".join(f"{k}: {v}" for k, v in sorted(ratings.items())))
+    logger.info("\nRatings: %s", " | ".join(f"{k}: {v}" for k, v in sorted(ratings.items())))
 
     # Trades executed
     executed = [r for r in report.results if r.order and r.order.status == "FILLED"]
@@ -218,9 +277,10 @@ def _log_daily_summary(report: DailyReport) -> None:
     logger.info("Total runtime: %.0f seconds (%.1f min)", report.total_duration_secs, report.total_duration_secs / 60)
 
 
+# ── CLI entry point ──────────────────────────────────────────────────────
+
 if __name__ == "__main__":
     import sys
-    from pathlib import Path
 
     from dotenv import load_dotenv
     load_dotenv()
@@ -245,32 +305,45 @@ if __name__ == "__main__":
 
     from . import create_broker
 
-    # Parse CLI args
+    # Defaults
     dry_run = "--dry-run" in sys.argv
-    mode = "paper"  # Always paper for daily runner
-    universe_size = 5  # Start small
+    use_screener = "--no-screen" not in sys.argv
+    mode = "paper"
+    num_candidates = DEFAULT_CANDIDATES
+    max_positions = MAX_POSITIONS
 
-    # Pick universe
-    universe = DEFAULT_UNIVERSE[:universe_size]
-
-    # Override from CLI
+    # Parse CLI args
     for arg in sys.argv[1:]:
         if arg.startswith("--tickers="):
-            universe = arg.split("=")[1].split(",")
+            # Explicit tickers → skip screener
+            use_screener = False
+            custom_tickers = arg.split("=")[1].split(",")
         elif arg.startswith("--mode="):
             mode = arg.split("=")[1]
-        elif arg.startswith("--universe="):
-            universe_size = int(arg.split("=")[1])
-            universe = DEFAULT_UNIVERSE[:universe_size]
+        elif arg.startswith("--candidates="):
+            num_candidates = int(arg.split("=")[1])
+        elif arg.startswith("--max-positions="):
+            max_positions = int(arg.split("=")[1])
 
     broker = create_broker({"trading_mode": mode})
     graph = TradingAgentsGraph(config=config)
 
-    print(f"\n🐶 Starting daily run — {len(universe)} tickers, {mode} mode")
-    print(f"   Tickers: {', '.join(universe)}")
+    # Determine universe
+    universe = custom_tickers if not use_screener and "custom_tickers" in dir() else NIFTY_50
+
+    print(f"\n🐶 Starting daily run — {mode} mode")
+    print(f"   Screener: {'ON (scanning all {})'.format(len(universe)) if use_screener else 'OFF'}")
+    print(f"   Max positions: {max_positions} | New candidates: {num_candidates}")
     print(f"   {'DRY RUN' if dry_run else 'LIVE EXECUTION'}")
     print()
 
-    report = run_daily(broker, graph, universe=universe, dry_run=dry_run)
+    report = run_daily(
+        broker, graph,
+        universe=universe,
+        dry_run=dry_run,
+        use_screener=use_screener,
+        num_candidates=num_candidates,
+        max_positions=max_positions,
+    )
 
     print("\n" + report.portfolio_summary)
