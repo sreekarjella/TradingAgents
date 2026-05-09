@@ -19,6 +19,7 @@ from typing import Optional
 import pyotp
 from SmartApi import SmartConnect
 
+from ..network import clear_proxy_for_angel_one
 from .broker import BrokerInterface, Holding, Order, PortfolioSnapshot
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,9 @@ class AngelOneBroker(BrokerInterface):
         """Authenticate and return a live SmartConnect session."""
         if self._smart_api is not None:
             return self._smart_api
+
+        # Angel One API is blocked by Walmart proxy — clear it
+        clear_proxy_for_angel_one()
 
         totp = pyotp.TOTP(self.totp_secret).now()
 
