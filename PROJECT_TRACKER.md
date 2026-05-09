@@ -53,14 +53,14 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 - [x] Validate: full pipeline end-to-end (market analyst only) ✅ ~20 min runtime
 - [x] Document what works and what breaks ✅ (see test results below)
 
-### Phase 1: India Adaptation (Target: Week 2-3)
+### Phase 1: India Adaptation ← **CURRENT**
 > Modify the framework to be India-market-aware
 
-- [ ] Fix ticker handling for `.NS`/`.BO` suffix
-- [ ] Replace SPY benchmark with NIFTY 50 (`^NSEI`)
-- [ ] Add India-centric global news queries (RBI, FII/DII, monsoon, elections, geopolitics)
+- [x] Fix ticker handling for `.NS`/`.BO` suffix (already works via `build_instrument_context`)
+- [x] Replace SPY benchmark with NIFTY 50 (`^NSEI`) — configurable via `benchmark_ticker`
+- [x] Add India-centric global news queries (RBI, FII/DII, geopolitics) — via `global_news_queries`
 - [ ] Add Indian news sources (Economic Times, Moneycontrol, LiveMint RSS)
-- [ ] Add India-specific context to analyst prompts (SEBI, circuit limits, T+1)
+- [x] Add India-specific context to analyst prompts (SEBI, circuit limits, T+1) — via `market_context`
 - [ ] Add India VIX, FII/DII flow data
 - [ ] Test with 10-15 popular NSE stocks (RELIANCE, TCS, INFY, HDFCBANK, etc.)
 - [ ] Tune debate rounds and prompt quality
@@ -127,7 +127,7 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 |---|---|---|---|---|
 | 2026-05-09 | RELIANCE.NS | Phase 0 | ✅ SELL | Full pipeline: market analyst→debate→trader→risk→PM. ~20 min runtime. |
 | 2026-05-09 | RELIANCE.NS | Data test | ✅ PASS | yfinance price/fundamentals/news all work via Walmart proxy |
-| 2026-05-09 | RELIANCE.NS | Indicators | ✅ PASS | SMA50, SMA200, MACD, MACDH, RSI, Bollinger (upper/mid/lower) |
+| 2026-05-09 | RELIANCE.NS | Phase 1 | ✅ UNDERWEIGHT | India-adapted pipeline: NIFTY 50 bench, India news, market context. JioMart losses, D/E cited |
 
 ---
 
