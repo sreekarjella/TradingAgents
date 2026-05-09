@@ -81,11 +81,13 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 - [x] Build factory: `create_broker({'trading_mode': 'paper'|'live'})` — one config flip
 - [x] Build portfolio reporting (markdown P&L, daily snapshots, benchmark tracking)
 - [x] Validate: BUY/SELL execution, weighted avg price, P&L, rejection guards ✅
-- [ ] Wire into TradingAgents pipeline (agent decision → auto paper trade)
+- [x] Wire into TradingAgents pipeline (agent decision → auto paper trade) ✅
+- [x] Build trade executor — resolve_trade() + execute_trade() with position sizing + guardrails ✅
+- [x] Build daily runner — review holdings → scan universe → snapshot → report ✅
+- [x] Add position sizing rules (Buy=5%, Overweight=3%, Underweight=50%, Sell=100%) ✅
+- [x] Add watchlist scanner (top 20 NIFTY 50 default universe) ✅
+- [x] Build portfolio review loop (review holdings first, then scan new) ✅
 - [ ] Build daily scheduler (run at 3:30 PM IST market close)
-- [ ] Build portfolio review loop (for each holding → analyze → decide)
-- [ ] Add position sizing rules (max % per stock, sector limits)
-- [ ] Add watchlist scanner (screen NIFTY 50/200 for opportunities)
 
 ### Phase 3: Paper Trading Month (Target: Week 4-7)
 > Run paper trading for 4+ weeks, collect performance data
@@ -143,7 +145,8 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | 2026-05-09 | — | India VIX | ✅ builds OK | yfinance `^INDIAVIX`, mood interpretation, 5-day trend table |
 | 2026-05-09 | — | FII/DII | ✅ builds OK | NSE API with session cookies, fallback message with manual links |
 | 2026-05-09 | — | Paper Broker | ✅ all tests | BUY/SELL, weighted avg, P&L, rejection guards, daily snapshot |
-| 2026-05-09 | — | Angel One | ✅ builds OK | SmartAPI auth, LTP, orders, holdings, funds — needs creds to test live |
+| 2026-05-09 | RELIANCE.NS | Angel One LIVE | ✅ ₹1,435.20 | Auth+TOTP+session+symbol(-EQ)+LTP+funds from home network |
+| 2026-05-09 | — | Executor | ✅ all tests | Buy 5%/Overweight 3%/Hold/Sell 100%/guardrails — all correct |
 
 ---
 
@@ -213,7 +216,9 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 
 | File | Type | Lines | Description |
 |---|---|---|---|
-| `tradingagents/trading/__init__.py` | New | 60 | Factory: `create_broker(config)` → paper or live |
+| `tradingagents/trading/__init__.py` | New | 65 | Factory + executor exports |
+| `tradingagents/trading/executor.py` | New | 220 | Trade executor: rating → sized order with guardrails |
+| `tradingagents/trading/daily_runner.py` | New | 205 | Daily orchestrator: review + scan + snapshot + report |
 | `tradingagents/trading/broker.py` | New | 106 | Abstract BrokerInterface + Order/Holding/PortfolioSnapshot |
 | `tradingagents/trading/paper_broker.py` | New | 361 | SQLite paper trading (real prices, virtual execution) |
 | `tradingagents/trading/angel_one.py` | New | 283 | Angel One SmartAPI (auth, LTP, orders, holdings, funds) |
@@ -244,4 +249,4 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 
 ---
 
-*Last updated: 2026-05-09T20:15 IST*
+*Last updated: 2026-05-09T21:20 IST*
