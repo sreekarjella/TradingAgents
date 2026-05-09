@@ -46,7 +46,8 @@ DEFAULT_CONFIG = {
         "core_stock_apis": "yfinance",       # Options: alpha_vantage, yfinance
         "technical_indicators": "yfinance",  # Options: alpha_vantage, yfinance
         "fundamental_data": "yfinance",      # Options: alpha_vantage, yfinance
-        "news_data": "yfinance",             # Options: alpha_vantage, yfinance
+        "news_data": "yfinance",             # Options: alpha_vantage, yfinance, india_rss
+                                                 # Comma-separated for fallback: "india_rss,yfinance"
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
