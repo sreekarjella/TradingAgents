@@ -11,8 +11,13 @@ INDIA_CONFIG = {
     "benchmark_ticker": "^NSEI",
     "benchmark_name": "NIFTY 50",
 
-    # Use India RSS for news, with yfinance fallback
+    # Use India RSS for news, with yfinance fallback.
+    # IMPORTANT: must include ALL vendor categories here because
+    # dict merge replaces the entire data_vendors dict, not individual keys.
     "data_vendors": {
+        "core_stock_apis": "yfinance",
+        "technical_indicators": "yfinance",
+        "fundamental_data": "yfinance",
         "news_data": "india_rss,yfinance",
     },
 

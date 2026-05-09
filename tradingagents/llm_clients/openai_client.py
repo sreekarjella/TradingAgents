@@ -1,6 +1,7 @@
 import os
 from typing import Any, Optional
 
+import httpx
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
 
@@ -155,7 +156,13 @@ class OpenAIClient(BaseLLMClient):
                 if api_key:
                     llm_kwargs["api_key"] = api_key
             else:
+                # Ollama: use dummy key and a direct (no-proxy) httpx client
+                # so Walmart proxy doesn't intercept localhost traffic.
                 llm_kwargs["api_key"] = "ollama"
+                llm_kwargs["http_client"] = httpx.Client(
+                    proxy=None, verify=False,
+                    timeout=httpx.Timeout(600.0, connect=30.0),
+                )
         elif self.base_url:
             llm_kwargs["base_url"] = self.base_url
 

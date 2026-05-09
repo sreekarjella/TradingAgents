@@ -38,8 +38,11 @@ def configure_network() -> str:
     if is_walmart_network():
         os.environ["HTTP_PROXY"] = _WALMART_PROXY
         os.environ["HTTPS_PROXY"] = _WALMART_PROXY
-        os.environ["NO_PROXY"] = _LOCAL_HOSTS
-        os.environ["no_proxy"] = _LOCAL_HOSTS
+        # httpx (used by langchain-openai) needs both upper and lower case,
+        # plus wildcard localhost patterns to avoid proxying Ollama calls.
+        no_proxy = f"{_LOCAL_HOSTS},.local,*.local"
+        os.environ["NO_PROXY"] = no_proxy
+        os.environ["no_proxy"] = no_proxy
         logger.info("Walmart network detected — proxy configured for external APIs")
         return "walmart"
 
