@@ -20,6 +20,10 @@ import pyotp
 from SmartApi import SmartConnect
 
 from ..network import clear_proxy_for_angel_one
+
+# Suppress SmartAPI's noisy logging (it dumps full request payloads
+# including API keys, passwords, and TOTP secrets — not cool!)
+logging.getLogger("smartConnect").setLevel(logging.WARNING)
 from .broker import BrokerInterface, Holding, Order, PortfolioSnapshot
 
 logger = logging.getLogger(__name__)
@@ -99,6 +103,9 @@ class AngelOneBroker(BrokerInterface):
     def _get_token(self, ticker: str) -> dict:
         """Resolve ticker to Angel One symbol token.
 
+        Prefers the ``-EQ`` (regular equity) segment over other series
+        like ``-BE`` (trade-to-trade), ``-BL`` (block deal), etc.
+
         Returns dict with keys: symboltoken, tradingsymbol, exchange.
         """
         symbol = _strip_suffix(ticker)
@@ -107,16 +114,26 @@ class AngelOneBroker(BrokerInterface):
             return self._token_map[symbol]
 
         api = self._ensure_session()
-        # Search for the symbol
         try:
             search_result = api.searchScrip(_EXCHANGE_NSE, symbol)
             if search_result and search_result.get("data"):
-                token_info = search_result["data"][0]
+                results = search_result["data"]
+
+                # Prefer -EQ (regular equity), fall back to first result
+                token_info = next(
+                    (r for r in results if r.get("tradingsymbol", "").endswith("-EQ")),
+                    results[0],
+                )
+
                 self._token_map[symbol] = {
                     "symboltoken": token_info["symboltoken"],
                     "tradingsymbol": token_info["tradingsymbol"],
                     "exchange": _EXCHANGE_NSE,
                 }
+                logger.info(
+                    "Resolved %s → %s (token %s)",
+                    ticker, token_info["tradingsymbol"], token_info["symboltoken"],
+                )
                 return self._token_map[symbol]
         except Exception as e:
             logger.warning("Symbol search failed for %s: %s", symbol, e)
@@ -279,9 +296,25 @@ class AngelOneBroker(BrokerInterface):
         return orders
 
     def get_cash(self) -> float:
-        """Get available cash from Angel One."""
+        """Get available cash from Angel One.
+
+        Tries multiple field names — Angel One API is inconsistent
+        across account types (equity, commodity, etc.).
+        """
         api = self._ensure_session()
         funds = api.rmsLimit()
         if funds and funds.get("data"):
-            return float(funds["data"].get("availablecash", 0))
+            data = funds["data"]
+            # Try common field names in order of preference
+            for field in ("availablecash", "net", "cash", "availableintradaypayin"):
+                val = data.get(field)
+                if val is not None:
+                    try:
+                        cash = float(val)
+                        if cash > 0:
+                            return cash
+                    except (ValueError, TypeError):
+                        continue
+            # Log the actual keys so we can debug
+            logger.debug("Funds response keys: %s", list(data.keys()))
         return 0.0
