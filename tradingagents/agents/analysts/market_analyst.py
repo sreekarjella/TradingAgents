@@ -8,6 +8,11 @@ from tradingagents.agents.utils.agent_utils import (
 from tradingagents.dataflows.config import get_config
 
 
+def _is_india_market() -> bool:
+    """Check if the current config targets Indian markets."""
+    return bool(get_config().get("market_context", "")) and "NSE" in get_config().get("market_context", "")
+
+
 def create_market_analyst(llm):
 
     def market_analyst_node(state):
@@ -18,6 +23,14 @@ def create_market_analyst(llm):
             get_stock_data,
             get_indicators,
         ]
+
+        # Add India-specific tools when configured for Indian markets
+        if _is_india_market():
+            from tradingagents.agents.utils.india_market_tools import (
+                get_fii_dii,
+                get_india_vix,
+            )
+            tools.extend([get_india_vix, get_fii_dii])
 
         system_message = (
             """You are a trading assistant tasked with analyzing financial markets. Your role is to select the **most relevant indicators** for a given market condition or trading strategy from the following list. The goal is to choose up to **8 indicators** that provide complementary insights without redundancy. Categories and each category's indicators are:

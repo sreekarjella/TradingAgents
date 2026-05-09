@@ -11,6 +11,11 @@ INDIA_CONFIG = {
     "benchmark_ticker": "^NSEI",
     "benchmark_name": "NIFTY 50",
 
+    # Use India RSS for news, with yfinance fallback
+    "data_vendors": {
+        "news_data": "india_rss,yfinance",
+    },
+
     # Market context injected into every agent prompt
     "market_context": (
         "This is an Indian stock listed on NSE (National Stock Exchange) or BSE (Bombay Stock Exchange). "
