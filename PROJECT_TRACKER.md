@@ -2,7 +2,7 @@
 
 > **Owner**: Sreekar
 > **Started**: 2026-05-09
-> **Status**: 🟢 Phase 1 — India Adaptation (near-complete)
+> **Status**: 🟢 Phase 2 — Paper Trading Engine (core built)
 > **Repo Base**: [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) v0.2.4
 
 ---
@@ -30,8 +30,10 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | Benchmark index | `^NSEI` (NIFTY 50) | Configurable via `benchmark_ticker` | 2026-05-09 |
 | India news sources | India RSS (ET, MC, LM) | 6 feeds, `india_rss` vendor, yfinance fallback | 2026-05-09 |
 | India market tools | India VIX + FII/DII | VIX via yfinance, FII/DII via NSE API | 2026-05-09 |
-| Broker (paper) | TBD | — | — |
-| Broker (real) | TBD | Zerodha / Angel One / Fyers shortlisted | — |
+| Broker | Angel One SmartAPI | User has account; paper + live via same interface | 2026-05-09 |
+| Trading architecture | Abstract BrokerInterface | Paper (SQLite) ↔ Live (Angel One) — one config flip | 2026-05-09 |
+| Paper trading DB | SQLite (`data/paper_portfolio.db`) | Lightweight, zero infra, portable | 2026-05-09 |
+| Virtual capital | ₹10,00,000 (10 Lakhs) | Configurable via `initial_capital` | 2026-05-09 |
 
 ---
 
@@ -69,37 +71,42 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 - [ ] Test with 10-15 popular NSE stocks (RELIANCE, TCS, INFY, HDFCBANK, etc.)
 - [ ] Tune debate rounds and prompt quality
 
-### Phase 2: Paper Trading Engine (Target: Week 4-6)
+### Phase 2: Paper Trading Engine ← **CURRENT** (core built)
 > Build portfolio tracking + simulated trading
 
-- [ ] Design portfolio database schema (SQLite)
-- [ ] Build paper trading simulator (virtual cash, order execution)
+- [x] Design portfolio database schema (SQLite: orders, holdings, daily_snapshots, config)
+- [x] Build abstract BrokerInterface (Order, Holding, PortfolioSnapshot dataclasses)
+- [x] Build PaperBroker — virtual cash, order execution at real prices, SQLite persistence
+- [x] Build AngelOneBroker — SmartAPI integration (auth, LTP, orders, holdings, funds)
+- [x] Build factory: `create_broker({'trading_mode': 'paper'|'live'})` — one config flip
+- [x] Build portfolio reporting (markdown P&L, daily snapshots, benchmark tracking)
+- [x] Validate: BUY/SELL execution, weighted avg price, P&L, rejection guards ✅
+- [ ] Wire into TradingAgents pipeline (agent decision → auto paper trade)
 - [ ] Build daily scheduler (run at 3:30 PM IST market close)
 - [ ] Build portfolio review loop (for each holding → analyze → decide)
 - [ ] Add position sizing rules (max % per stock, sector limits)
 - [ ] Add watchlist scanner (screen NIFTY 50/200 for opportunities)
-- [ ] Build daily P&L reporting
 
-### Phase 3: Paper Trading Month (Target: Week 7-10)
+### Phase 3: Paper Trading Month (Target: Week 4-7)
 > Run paper trading for 4+ weeks, collect performance data
 
-- [ ] Define starting capital (virtual)
-- [ ] Define stock universe (which stocks to consider)
+- [ ] Define stock universe (NIFTY 50 default)
 - [ ] Run daily for 4 weeks
 - [ ] Track: win rate, avg return, max drawdown, alpha vs NIFTY 50
 - [ ] Tune prompts based on reflection data
 - [ ] Document lessons learned
 - [ ] Go/No-Go decision for real money
 
-### Phase 4: Broker Integration (Target: Week 11-13)
-> Connect to real Indian broker API
+### Phase 4: Micro Real Trading (Target: Week 8-10)
+> Flip config flag → live execution via Angel One SmartAPI
 
-- [ ] Choose broker and get API access
-- [ ] Build broker adapter layer (abstract interface)
-- [ ] Implement order placement (market/limit orders)
+- [x] ~~Choose broker~~ — Angel One SmartAPI ✅
+- [x] ~~Build broker adapter layer~~ — BrokerInterface + AngelOneBroker ✅
+- [x] ~~Implement order placement~~ — MARKET + LIMIT, DELIVERY product type ✅
+- [ ] Add Angel One credentials to `.env` (API key, client ID, password, TOTP)
 - [ ] Add safety guardrails (max order size, daily loss limit, kill switch)
 - [ ] Add error handling (network failures, partial fills, rejected orders)
-- [ ] Start with tiny positions (₹1,000-5,000 per trade)
+- [ ] Start with micro positions (₹500-1,000 per trade)
 
 ### Phase 5: Production Hardening (Ongoing)
 > Monitoring, alerts, scaling
@@ -135,6 +142,8 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | 2026-05-09 | — | India RSS | ✅ 26/26 tests | ET, Moneycontrol, LiveMint RSS feeds. 30 company name mappings. |
 | 2026-05-09 | — | India VIX | ✅ builds OK | yfinance `^INDIAVIX`, mood interpretation, 5-day trend table |
 | 2026-05-09 | — | FII/DII | ✅ builds OK | NSE API with session cookies, fallback message with manual links |
+| 2026-05-09 | — | Paper Broker | ✅ all tests | BUY/SELL, weighted avg, P&L, rejection guards, daily snapshot |
+| 2026-05-09 | — | Angel One | ✅ builds OK | SmartAPI auth, LTP, orders, holdings, funds — needs creds to test live |
 
 ---
 
@@ -158,6 +167,9 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | 2026-05-09 | Configurable benchmark, not hardcoded India | Keep framework market-agnostic; India is a config overlay |
 | 2026-05-09 | India RSS as fallback chain (`india_rss,yfinance`) | RSS feeds are free + India-specific; yfinance as safety net |
 | 2026-05-09 | Delegate news module to python-programmer agent | Parallel workstreams: agent built RSS while laila built VIX/FII |
+| 2026-05-09 | Angel One as broker (not Zerodha/Fyers) | User already has Angel One account; SmartAPI is free |
+| 2026-05-09 | Option D: paper first → micro live | Paper via SQLite, live via same interface — one config flip |
+| 2026-05-09 | Collapsed Phase 2 + 4 | Broker adapter built alongside paper engine — no need for separate phase |
 
 ---
 
@@ -174,6 +186,8 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | NSE API requires session cookies | FII/DII data fragile | Built cookie-based session handler + fallback links |
 | LLMs can hallucinate financial data | Bad trade decisions | Multi-agent debate catches most errors; memory system self-corrects |
 | Market hours mismatch (IST vs UTC) | Wrong timing for trades | Add IST-aware scheduling in Phase 2 |
+| Angel One session expiry | Auth token expires mid-day | Re-auth on API error; TOTP auto-rotates via pyotp |
+| Accidental live trades | Real money loss | Default mode is `paper`; live requires explicit config + creds |
 | SEBI regulation changes for algo trading | Legal risk | Monitor SEBI circulars, start with manual approval step |
 
 ---
@@ -188,10 +202,26 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 - **NSE India**: https://www.nseindia.com
 - **Zerodha Kite API**: https://kite.trade/docs/connect/v3/
 - **Angel One SmartAPI**: https://smartapi.angelone.in/docs
+- **Angel One SmartAPI Python SDK**: https://pypi.org/project/smartapi-python/
+- **PyOTP (TOTP for Angel One)**: https://pypi.org/project/pyotp/
 
 ---
 
-## 🏗️ Files Added/Modified in Phase 1
+## 🏗️ Files Added/Modified
+
+### Phase 2: Trading Package (new)
+
+| File | Type | Lines | Description |
+|---|---|---|---|
+| `tradingagents/trading/__init__.py` | New | 60 | Factory: `create_broker(config)` → paper or live |
+| `tradingagents/trading/broker.py` | New | 106 | Abstract BrokerInterface + Order/Holding/PortfolioSnapshot |
+| `tradingagents/trading/paper_broker.py` | New | 361 | SQLite paper trading (real prices, virtual execution) |
+| `tradingagents/trading/angel_one.py` | New | 283 | Angel One SmartAPI (auth, LTP, orders, holdings, funds) |
+| `tradingagents/trading/portfolio.py` | New | 116 | P&L reports, daily snapshots, markdown output |
+| `.env` | Modified | +4 | Angel One credential placeholders |
+| `.gitignore` | Modified | +2 | Exclude `data/` (SQLite DB) |
+
+### Phase 1: India Adaptation
 
 | File | Type | Lines | Description |
 |---|---|---|---|
@@ -213,4 +243,4 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 
 ---
 
-*Last updated: 2026-05-09T19:30 IST*
+*Last updated: 2026-05-09T20:15 IST*
