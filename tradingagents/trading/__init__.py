@@ -11,6 +11,7 @@ Usage:
 """
 
 from .broker import BrokerInterface, Holding, Order, PortfolioSnapshot
+from .executor import TradeAction, execute_trade, resolve_trade
 from .paper_broker import PaperBroker
 from .portfolio import daily_pnl_report, portfolio_report
 
@@ -54,7 +55,10 @@ __all__ = [
     "Order",
     "PortfolioSnapshot",
     "PaperBroker",
+    "TradeAction",
     "create_broker",
     "daily_pnl_report",
+    "execute_trade",
     "portfolio_report",
+    "resolve_trade",
 ]
