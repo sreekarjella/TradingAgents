@@ -218,3 +218,6 @@ __marimo__/
 # Cache
 **/data_cache/
 *.DS_Store
+-e 
+# Paper trading database
+data/
