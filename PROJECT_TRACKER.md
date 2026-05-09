@@ -34,6 +34,10 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | Trading architecture | Abstract BrokerInterface | Paper (SQLite) ↔ Live (Angel One) — one config flip | 2026-05-09 |
 | Paper trading DB | SQLite (`data/paper_portfolio.db`) | Lightweight, zero infra, portable | 2026-05-09 |
 | Virtual capital | ₹10,00,000 (10 Lakhs) | Configurable via `initial_capital` | 2026-05-09 |
+| Pre-screener approach | Heuristic scoring, no LLM | Scan 50 stocks in 20s; pipeline costs ~15 min/stock | 2026-05-09 |
+| Screener scoring mode | Buy-biased (default) | New candidates need buy-worthiness, not just "interesting" | 2026-05-09 |
+| Sentiment analysis | Keyword heuristics (30+ bullish/bearish words) | Zero LLM cost; ~80% accuracy; pipeline catches the rest | 2026-05-09 |
+| Portfolio cap | 10 positions max | Prevents over-diversification; configurable via `--max-positions` | 2026-05-09 |
 
 ---
 
@@ -87,6 +91,12 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 - [x] Add position sizing rules (Buy=5%, Overweight=3%, Underweight=50%, Sell=100%) ✅
 - [x] Add watchlist scanner (top 20 NIFTY 50 default universe) ✅
 - [x] Build portfolio review loop (review holdings first, then scan new) ✅
+- [x] Build pre-screener — heuristic scoring of all 50 NIFTY stocks in ~20 seconds ✅
+- [x] Add buy-biased scoring mode for new candidate selection ✅
+- [x] Add keyword sentiment analysis on RSS headlines (30+ bullish + 30+ bearish keywords) ✅
+- [x] Add direction-agnostic mode for holdings review (`--action` flag) ✅
+- [x] Add portfolio position cap (MAX_POSITIONS=10, buy slots tracking) ✅
+- [x] Wire pre-screener into daily runner (screen 50 → pick top 5 → pipeline) ✅
 - [ ] Build daily scheduler (run at 3:30 PM IST market close)
 
 ### Phase 3: Paper Trading Month (Target: Week 4-7)
@@ -147,6 +157,10 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | 2026-05-09 | — | Paper Broker | ✅ all tests | BUY/SELL, weighted avg, P&L, rejection guards, daily snapshot |
 | 2026-05-09 | RELIANCE.NS | Angel One LIVE | ✅ ₹1,435.20 | Auth+TOTP+session+symbol(-EQ)+LTP+funds from home network |
 | 2026-05-09 | — | Executor | ✅ all tests | Buy 5%/Overweight 3%/Hold/Sell 100%/guardrails — all correct |
+| 2026-05-09 | — | Pre-screener (agnostic) | ✅ 50 stocks/22s | SBIN #1 (88.5), BRITANNIA #2 (74.3), TITAN #3 (68.3) — big movers ranked |
+| 2026-05-09 | — | Pre-screener (buy-biased) | ✅ 50 stocks/18s | TITAN #1 (+64.2), APOLLO #2 (+57.7), ASIANPAINT #3 (+52.3) — SBI/BRIT filtered out |
+| 2026-05-09 | — | Keyword sentiment | ✅ live RSS | ADANIPORTS: -0.5 (1 pos, 3 neg keywords). TITAN: +1.0 (4 pos, 0 neg) |
+| 2026-05-09 | — | Buy-bias filter | ✅ validated | Falling knives (SBI -6.7%, BRIT -5.1%) excluded from buy candidates |
 
 ---
 
@@ -173,6 +187,9 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | 2026-05-09 | Angel One as broker (not Zerodha/Fyers) | User already has Angel One account; SmartAPI is free |
 | 2026-05-09 | Option D: paper first → micro live | Paper via SQLite, live via same interface — one config flip |
 | 2026-05-09 | Collapsed Phase 2 + 4 | Broker adapter built alongside paper engine — no need for separate phase |
+| 2026-05-09 | Pre-screener: buy-biased default | New candidates need positive-momentum bias; direction-agnostic for holdings review |
+| 2026-05-09 | Keyword sentiment over LLM sentiment | Zero cost, ~80% accuracy, runs in <1 sec for all 50 stocks. Pipeline (with LLM) catches the remaining 20% |
+| 2026-05-09 | Two scoring modes, one module | Same `pre_screener.py` handles both buy-biased and action modes. DRY over separate modules |
 
 ---
 
@@ -216,9 +233,10 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 
 | File | Type | Lines | Description |
 |---|---|---|---|
-| `tradingagents/trading/__init__.py` | New | 65 | Factory + executor exports |
+| `tradingagents/trading/__init__.py` | New | 68 | Factory + executor + screener exports |
 | `tradingagents/trading/executor.py` | New | 220 | Trade executor: rating → sized order with guardrails |
-| `tradingagents/trading/daily_runner.py` | New | 205 | Daily orchestrator: review + scan + snapshot + report |
+| `tradingagents/trading/pre_screener.py` | New | 555 | Heuristic stock screener: 2 modes, keyword sentiment, no LLM |
+| `tradingagents/trading/daily_runner.py` | New | 352 | Daily orchestrator: pre-screen → review → pipeline → trade |
 | `tradingagents/trading/broker.py` | New | 106 | Abstract BrokerInterface + Order/Holding/PortfolioSnapshot |
 | `tradingagents/trading/paper_broker.py` | New | 361 | SQLite paper trading (real prices, virtual execution) |
 | `tradingagents/trading/angel_one.py` | New | 283 | Angel One SmartAPI (auth, LTP, orders, holdings, funds) |
@@ -249,4 +267,47 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 
 ---
 
-*Last updated: 2026-05-09T21:20 IST*
+---
+
+## 🔍 Pre-Screener — How It Works
+
+The pre-screener scans all 50 NIFTY stocks in ~20 seconds with **zero LLM calls**.
+It produces a ranked list of candidates for the expensive pipeline (~15 min/stock).
+
+### Two Scoring Modes
+
+| Mode | Flag | Score Range | Used For |
+|---|---|---|---|
+| **Buy-biased** (default) | — | -25 to +100 | New stock candidate selection |
+| **Direction-agnostic** | `--action` | 0 to 100 | Holdings review, market scanning |
+
+### Scoring Components (100 points max)
+
+| Component | Weight | Buy-Biased | Direction-Agnostic |
+|---|---|---|---|
+| Volume | 25 pts | Spike + price up = 🟢, spike + price down = 🔴 | Any spike = good |
+| News | 25 pts | Mentions × keyword sentiment (+/-) | Mention count only |
+| 5-day momentum | 20 pts | Positive = reward, negative = penalty | Absolute magnitude |
+| 1-day momentum | 15 pts | Positive = reward, negative = penalty | Absolute magnitude |
+| 3mo proximity | 15 pts | Near high = 🟢 breakout, near low = 🔴 falling knife | Either extreme = interesting |
+
+### Keyword Sentiment (30+ words each)
+
+| Bullish | Bearish |
+|---|---|
+| profit, growth, upgrade, breakout, rally, surge | loss, fraud, downgrade, crash, plunge, slump |
+| beat, outperform, strong, gain, dividend, buyback | probe, penalty, crisis, layoff, warning, miss |
+| acquisition, partnership, contract, approval | default, debt, sell-off, decline, weak |
+
+Sentiment = `(positive_hits - negative_hits) / total_hits`, clamped to [-1.0, +1.0].
+
+### Real Example (2026-05-09)
+
+| Stock | Agnostic Rank | Buy-Biased Rank | Why the difference |
+|---|---|---|---|
+| SBIN.NS (-6.7%) | #1 (88.5) | Not in top 10 | 🔴 Negative momentum + distribution + falling knife |
+| BRITANNIA.NS (-5.1%) | #2 (74.3) | Not in top 10 | 🔴 Volume spike on down day = distribution |
+| TITAN.NS (+4.7%) | #3 (68.3) | **#1 (+64.2)** | 🟢 Accumulation + breakout + bullish news |
+| ADANIPORTS.NS (+1.6%) | #6 (51.6) | #6 (+34.3) | 🔴 Bearish news sentiment (-0.5) docked points |
+
+*Last updated: 2026-05-09T23:30 IST*

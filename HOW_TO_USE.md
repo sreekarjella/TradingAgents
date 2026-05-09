@@ -17,10 +17,11 @@
 8. [Paper Trading](#8-paper-trading)
 9. [Live Trading (Angel One)](#9-live-trading-angel-one)
 10. [Daily Runner (Multi-Ticker)](#10-daily-runner-multi-ticker)
-11. [Interactive CLI](#11-interactive-cli)
-12. [Memory & Learning](#12-memory--learning)
-13. [All Config Options](#13-all-config-options)
-14. [Troubleshooting](#14-troubleshooting)
+11. [Pre-Screener (Stock Selection)](#11-pre-screener-stock-selection)
+12. [Interactive CLI](#12-interactive-cli)
+13. [Memory & Learning](#13-memory--learning)
+14. [All Config Options](#14-all-config-options)
+15. [Troubleshooting](#15-troubleshooting)
 
 ---
 
@@ -489,23 +490,42 @@ All other code (`resolve_trade`, `execute_trade`, `portfolio_report`) works unch
 
 ## 10. Daily Runner (Multi-Ticker)
 
-Scan multiple stocks in one run, review existing holdings, and build a portfolio:
+The daily runner is the **main automation loop**: it pre-screens 50 stocks,
+picks the most promising candidates, reviews existing holdings, runs the full
+agent pipeline, and executes trades.
 
 ### Command Line
 
 ```bash
-# Scan top 5 NIFTY 50 stocks (paper mode)
+# Default: pre-screen all 50 NIFTY stocks, pick top 5, run pipeline
 python -m tradingagents.trading.daily_runner
 
-# Custom tickers
+# Custom candidate count
+python -m tradingagents.trading.daily_runner --candidates=7
+
+# Cap portfolio at 8 positions
+python -m tradingagents.trading.daily_runner --max-positions=8
+
+# Skip screener, use specific tickers
 python -m tradingagents.trading.daily_runner --tickers=RELIANCE.NS,TCS.NS,INFY.NS
 
-# Dry run (analyze only)
-python -m tradingagents.trading.daily_runner --dry-run
+# Skip screener, use first N from universe (old behavior)
+python -m tradingagents.trading.daily_runner --no-screen
 
-# Scan more of the universe
-python -m tradingagents.trading.daily_runner --universe=20
+# Dry run (analyze only, no trades)
+python -m tradingagents.trading.daily_runner --dry-run
 ```
+
+### CLI Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--candidates=N` | 5 | How many new candidates the screener picks |
+| `--max-positions=N` | 10 | Hard cap on portfolio positions |
+| `--no-screen` | off | Skip pre-screener, use first N of universe |
+| `--tickers=X,Y,Z` | — | Explicit tickers (implies `--no-screen`) |
+| `--dry-run` | off | Analyze only, don’t execute trades |
+| `--mode=paper\|live` | paper | Broker mode |
 
 ### Python API
 
@@ -520,9 +540,11 @@ graph = TradingAgentsGraph(config=config)
 report = run_daily(
     broker=broker,
     graph=graph,
-    universe=["RELIANCE.NS", "TCS.NS", "INFY.NS"],
     dry_run=False,
-    review_holdings=True,  # Re-analyze existing positions first
+    review_holdings=True,
+    use_screener=True,       # Enable pre-screener (default)
+    num_candidates=5,        # Top 5 from screener
+    max_positions=10,        # Portfolio cap
 )
 
 print(report.portfolio_summary)
@@ -531,21 +553,150 @@ print(report.portfolio_summary)
 ### Daily Workflow
 
 ```
-1. Review holdings    → Re-analyze each position → sell if Underweight/Sell
-2. Scan universe      → Analyze new tickers → buy if Buy/Overweight
-3. Take snapshot      → Record portfolio state in SQLite
-4. Generate report    → Markdown summary with P&L
+┌────────────────────────────────────────────────────────────┐
+│  Step 1: PRE-SCREENER (~20 seconds, zero LLM)          │
+│  Scan 50 NIFTY stocks → rank by buy opportunity score   │
+│  Volume spikes + momentum + news sentiment + breakouts  │
+└──────────────────────────┬─────────────────────────────────┘
+                          │ Top 5 candidates
+┌──────────────────────────┴─────────────────────────────────┐
+│  Step 2: REVIEW HOLDINGS (~15 min per held stock)       │
+│  Re-analyze each position → sell if Underweight/Sell    │
+│  Frees up buy slots for new candidates                  │
+└──────────────────────────┬─────────────────────────────────┘
+                          │ Buy slots available?
+┌──────────────────────────┴─────────────────────────────────┐
+│  Step 3: ANALYZE CANDIDATES (~15 min per stock)         │
+│  Full 12-agent pipeline → Buy/Overweight/Hold/Sell      │
+│  Stops when portfolio is full (max_positions reached)    │
+└──────────────────────────┬─────────────────────────────────┘
+                          │
+┌──────────────────────────┴─────────────────────────────────┐
+│  Step 4: SNAPSHOT + REPORT                              │
+│  Record portfolio state in SQLite, generate P&L report  │
+└────────────────────────────────────────────────────────────┘
 ```
 
-### Default Universe (NIFTY 50 Blue-Chips)
+### Portfolio Position Cap
 
-RELIANCE, TCS, INFY, HDFCBANK, ICICIBANK, HINDUNILVR, SBIN, BHARTIARTL, ITC,
-KOTAKBANK, LT, AXISBANK, BAJFINANCE, MARUTI, TITAN, SUNPHARMA, TATAMOTORS,
-ONGC, NTPC, POWERGRID
+The system enforces a maximum number of positions (default 10):
+
+```
+Day 1:  0 held + 5 screened → analyze 5 → buy 3        → 3 positions
+Day 2:  3 held + 5 screened → review 3 + analyze 5     → 6 positions
+Day 3:  6 held + 5 screened → review 6 + analyze 4     → 9 positions
+Day 4:  9 held + 5 screened → review 9 + analyze 1     → 10 positions (FULL)
+Day 5: 10 held              → review 10 only            → sells 2 → 8 positions
+        8 held + 5 screened → analyze 2 (only 2 slots) → 10 positions
+```
 
 ---
 
-## 11. Interactive CLI
+## 11. Pre-Screener (Stock Selection)
+
+The pre-screener is a fast, **zero-LLM** heuristic ranker that decides which
+stocks deserve the expensive 15-minute agent pipeline.
+
+### Why It Exists
+
+The pipeline costs ~15 minutes per stock (with local LLMs). Scanning all 50
+NIFTY stocks would take **12+ hours**. The pre-screener scans all 50 in
+**~20 seconds** and picks the top 5 most promising.
+
+### Two Scoring Modes
+
+| Mode | Default? | Score Range | Purpose |
+|---|---|---|---|
+| **Buy-biased** | Yes | -25 to +100 | Find stocks worth buying |
+| **Direction-agnostic** | No | 0 to 100 | Find where action is happening |
+
+### Buy-Biased Mode (Default)
+
+Designed for **new candidate selection**. Rewards bullish signals, penalizes bearish:
+
+| Signal | Bullish (🟢) | Bearish (🔴) |
+|---|---|---|
+| Volume spike + price up | Accumulation → reward | — |
+| Volume spike + price down | — | Distribution → penalty |
+| Positive 1d/5d momentum | Full points | — |
+| Negative 1d/5d momentum | — | Penalty (negative score) |
+| Near 3-month high | Breakout potential → reward | — |
+| Near 3-month low | — | Falling knife → penalty |
+| Bullish news keywords | Bonus | — |
+| Bearish news keywords | — | Penalty |
+
+### Keyword Sentiment Analysis
+
+Headlines from 6 India RSS feeds are scanned for ~30 bullish and ~30 bearish keywords:
+
+**Bullish**: profit, growth, upgrade, breakout, rally, surge, beat, outperform,
+dividend, buyback, acquisition, partnership, contract, approval, recovery, rebound
+
+**Bearish**: loss, fraud, downgrade, crash, plunge, slump, probe, investigation,
+penalty, crisis, layoff, warning, miss, default, debt, decline, sell-off
+
+Sentiment = `(positive_hits - negative_hits) / total_hits`, clamped to [-1.0, +1.0].
+
+### Standalone Usage
+
+```bash
+# Top 10 buy candidates (default buy-biased)
+python -m tradingagents.trading.pre_screener 10
+
+# Top 10 by raw interestingness (direction-agnostic)
+python -m tradingagents.trading.pre_screener 10 --action
+```
+
+Example output:
+```
+🔍 Top 10 NIFTY 50 — BUY-BIASED screening
+
+#    Ticker              Score    Vol     1d%     5d%  News  Sent  Reasons
+─────────────────────────────────────────────────────────────────────────────────────────────────
+1    TITAN.NS           +64.2   4.1x   +4.7%   +2.8%    1  +1.0  🟢 accumulation, breakout, bullish news
+2    APOLLOHOSP.NS      +57.7   2.4x   +3.3%   +6.0%    0     —  🟢 accumulation, strong momentum
+3    ASIANPAINT.NS      +52.3   2.1x   +2.7%   +6.4%    0     —  🟢 accumulation, breakout
+```
+
+### Python API
+
+```python
+from tradingagents.trading.pre_screener import pre_screen, NIFTY_50
+
+# Buy-biased (default) — for new candidates
+candidates = pre_screen(NIFTY_50, top_n=5, buy_bias=True)
+
+# Direction-agnostic — for market scanning
+movers = pre_screen(NIFTY_50, top_n=10, buy_bias=False)
+
+for r in candidates:
+    print(f"{r.ticker}: score={r.total_score:+.1f}, "
+          f"sentiment={r.news_sentiment:+.1f}, "
+          f"reasons={r.reasons}")
+```
+
+### Scoring Components
+
+| Component | Weight | What It Measures |
+|---|---|---|
+| Volume | 25 pts | Today’s volume vs 20-day average |
+| News | 25 pts | RSS mentions × keyword sentiment |
+| 5-day momentum | 20 pts | 5-day return direction + magnitude |
+| 1-day momentum | 15 pts | 1-day return direction + magnitude |
+| 3-month proximity | 15 pts | Distance from 3-month high/low |
+
+### How Buy-Bias Filters Work (Real Example)
+
+SBI dropped 6.7% on 2026-05-09 with 2.9x volume and 6 news mentions:
+
+| Mode | Rank | Score | Why |
+|---|---|---|---|
+| Direction-agnostic | **#1** | +88.5 | Big crash = interesting |
+| Buy-biased | **Not in top 10** | Negative | 🔴 Distribution + falling knife + negative momentum |
+
+---
+
+## 12. Interactive CLI
 
 The built-in CLI provides a rich TUI with live progress:
 
@@ -563,7 +714,7 @@ It walks you through:
 
 ---
 
-## 12. Memory & Learning
+## 13. Memory & Learning
 
 The framework has a **memory system** that learns from past decisions:
 
@@ -599,7 +750,7 @@ config["memory_log_path"] = "/path/to/memory.md"
 
 ---
 
-## 13. All Config Options
+## 14. All Config Options
 
 | Key | Default | Description |
 |---|---|---|
@@ -642,7 +793,7 @@ This sets:
 
 ---
 
-## 14. Troubleshooting
+## 15. Troubleshooting
 
 ### Ollama: "404 page not found"
 
@@ -804,6 +955,7 @@ TradingAgents/
 │       ├── paper_broker.py        # SQLite paper trading
 │       ├── angel_one.py           # Angel One SmartAPI
 │       ├── executor.py            # Rating → sized trade with guardrails
+│       ├── pre_screener.py        # Heuristic stock screener (2 modes, no LLM)
 │       ├── daily_runner.py        # Multi-ticker daily orchestrator
 │       └── portfolio.py           # Reporting + P&L
 └── data/
