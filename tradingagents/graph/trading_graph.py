@@ -117,7 +117,7 @@ class TradingAgentsGraph:
         )
 
         self.propagator = Propagator()
-        self.reflector = Reflector(self.quick_thinking_llm)
+        self.reflector = Reflector(self.quick_thinking_llm, benchmark_name=self.config.get("benchmark_name", "S&P 500"))
         self.signal_processor = SignalProcessor(self.quick_thinking_llm)
 
         # State tracking
@@ -203,7 +203,7 @@ class TradingAgentsGraph:
             end_str = end.strftime("%Y-%m-%d")
 
             stock = yf.Ticker(ticker).history(start=trade_date, end=end_str)
-            spy = yf.Ticker("SPY").history(start=trade_date, end=end_str)
+            spy = yf.Ticker(self.config.get("benchmark_ticker", "SPY")).history(start=trade_date, end=end_str)
 
             if len(stock) < 2 or len(spy) < 2:
                 return None, None, None

@@ -120,13 +120,19 @@ def get_global_news_yfinance(
     Returns:
         Formatted string containing global news articles
     """
-    # Search queries for macro/global news
-    search_queries = [
-        "stock market economy",
-        "Federal Reserve interest rates",
-        "inflation economic outlook",
-        "global markets trading",
-    ]
+    from .config import get_config
+
+    # Use custom queries from config, or fall back to defaults
+    custom_queries = get_config().get("global_news_queries")
+    if custom_queries:
+        search_queries = list(custom_queries)
+    else:
+        search_queries = [
+            "stock market economy",
+            "Federal Reserve interest rates",
+            "inflation economic outlook",
+            "global markets trading",
+        ]
 
     all_news = []
     seen_titles = set()

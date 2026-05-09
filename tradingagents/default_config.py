@@ -31,6 +31,11 @@ DEFAULT_CONFIG = {
     # Output language for analyst reports and final decision
     # Internal agent debate stays in English for reasoning quality
     "output_language": "English",
+    # Benchmark and market context
+    "benchmark_ticker": "SPY",       # Benchmark index ticker for alpha calculation
+    "benchmark_name": "S&P 500",     # Human-readable benchmark name
+    "market_context": "",            # Extra context injected into all agent prompts
+    "global_news_queries": None,     # Custom news search queries (list of str); None = default
     # Debate and discussion settings
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,
