@@ -171,7 +171,8 @@ def run_daily(
     logger.info("=" * 60)
     logger.info("Mode: %s", "DRY RUN" if dry_run else "LIVE EXECUTION")
     logger.info("Max positions: %d | New candidates: %d", max_positions, num_candidates)
-    logger.info("Universe: %d tickers | Screener: %s", len(universe), "ON" if use_screener else "OFF")
+    logger.info("Universe: %d tickers | Screener: %s", len(universe),
+                "ON (buy-biased)" if use_screener else "OFF")
 
     # ── Step 1: Review existing holdings ─────────────────────────────
     held_tickers: set[str] = set()
@@ -206,6 +207,7 @@ def run_daily(
                 top_n=effective_candidates,
                 trade_date=trade_date,
                 exclude=held_tickers,
+                buy_bias=True,
             )
             report.screen_results = screen_results
             candidates = [r.ticker for r in screen_results]
@@ -251,7 +253,8 @@ def _log_daily_summary(report: DailyReport) -> None:
         logger.info("\n🔍 Pre-screen picks:")
         for i, sr in enumerate(report.screen_results, 1):
             reasons = ", ".join(sr.reasons) if sr.reasons else "baseline"
-            logger.info("  %d. %s — score %.1f (%s)", i, sr.ticker, sr.total_score, reasons)
+            sent = f" [sentiment: {sr.news_sentiment:+.1f}]" if sr.news_mentions > 0 else ""
+            logger.info("  %d. %s — score %+.1f%s (%s)", i, sr.ticker, sr.total_score, sent, reasons)
 
     # Count by rating
     ratings: dict[str, int] = {}
