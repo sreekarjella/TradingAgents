@@ -2,6 +2,8 @@
 
 > **Multi-Agent AI Trading Framework** — 4 analysts debate, a risk team challenges, and a portfolio manager decides.  
 > Works with Indian stocks (NSE/BSE), US stocks, and any ticker yfinance supports.
+>
+> 📖 **New here?** Read [HOW_IT_WORKS.md](HOW_IT_WORKS.md) first — a plain-English guide with zero jargon.
 
 ---
 

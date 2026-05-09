@@ -216,6 +216,8 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 
 - **Repo**: https://github.com/TauricResearch/TradingAgents
 - **Paper**: https://arxiv.org/abs/2412.20138
+- **How It Works (non-technical)**: [HOW_IT_WORKS.md](HOW_IT_WORKS.md)
+- **How to Use (developer guide)**: [HOW_TO_USE.md](HOW_TO_USE.md)
 - **Ollama**: https://ollama.com
 - **Qwen3 Model Card**: https://huggingface.co/Qwen/Qwen3-32B
 - **yfinance Docs**: https://github.com/ranaroussi/yfinance
