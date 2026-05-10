@@ -2,7 +2,7 @@
 
 > **Owner**: Sreekar
 > **Started**: 2026-05-09
-> **Status**: 🟢 Phase 2 — Paper Trading Engine (core built)
+> **Status**: 🟢 Phase 2 — Paper Trading Engine (core built, config centralized)
 > **Repo Base**: [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) v0.2.4
 
 ---
@@ -38,6 +38,9 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | Screener scoring mode | Buy-biased (default) | New candidates need buy-worthiness, not just "interesting" | 2026-05-09 |
 | Sentiment analysis | Keyword heuristics (30+ bullish/bearish words) | Zero LLM cost; ~80% accuracy; pipeline catches the rest | 2026-05-09 |
 | Portfolio cap | 10 positions max | Prevents over-diversification; configurable via `--max-positions` | 2026-05-09 |
+| Config format | TOML (`config.toml`) | Human-readable, built into Python 3.11+, zero deps | 2026-05-09 |
+| Config architecture | Single file + loader with bridge methods | TOML → `TradingConfig` → `.pipeline_config` / `.broker_config` dicts | 2026-05-09 |
+| Documentation strategy | 3 docs for 3 audiences | HOW_IT_WORKS (non-tech), HOW_TO_USE (dev), PROJECT_TRACKER (owner) | 2026-05-09 |
 
 ---
 
@@ -97,6 +100,13 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 - [x] Add direction-agnostic mode for holdings review (`--action` flag) ✅
 - [x] Add portfolio position cap (MAX_POSITIONS=10, buy slots tracking) ✅
 - [x] Wire pre-screener into daily runner (screen 50 → pick top 5 → pipeline) ✅
+- [x] Centralize all config into `config.toml` — single user-editable file ✅
+- [x] Build config loader with bridge methods for backward compatibility ✅
+- [x] Make executor accept guardrails from config (no hardcoded constants) ✅
+- [x] Make pre-screener accept weights + keywords from config ✅
+- [x] Add `--config=path.toml` CLI flag to daily runner ✅
+- [x] Add config verifier: `python -m tradingagents.config_loader` ✅
+- [x] Write HOW_IT_WORKS.md — plain-English guide for non-technical readers ✅
 - [ ] Build daily scheduler (run at 3:30 PM IST market close)
 
 ### Phase 3: Paper Trading Month (Target: Week 4-7)
@@ -161,6 +171,8 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | 2026-05-09 | — | Pre-screener (buy-biased) | ✅ 50 stocks/18s | TITAN #1 (+64.2), APOLLO #2 (+57.7), ASIANPAINT #3 (+52.3) — SBI/BRIT filtered out |
 | 2026-05-09 | — | Keyword sentiment | ✅ live RSS | ADANIPORTS: -0.5 (1 pos, 3 neg keywords). TITAN: +1.0 (4 pos, 0 neg) |
 | 2026-05-09 | — | Buy-bias filter | ✅ validated | Falling knives (SBI -6.7%, BRIT -5.1%) excluded from buy candidates |
+| 2026-05-09 | — | Config loader | ✅ all imports | config.toml loaded, all 17 pipeline_config keys, 7 broker_config keys, weights/sizing/guardrails bridged |
+| 2026-05-09 | — | Config verifier | ✅ passes | `python -m tradingagents.config_loader` — all sections valid, weights sum to 100 |
 
 ---
 
@@ -190,6 +202,10 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | 2026-05-09 | Pre-screener: buy-biased default | New candidates need positive-momentum bias; direction-agnostic for holdings review |
 | 2026-05-09 | Keyword sentiment over LLM sentiment | Zero cost, ~80% accuracy, runs in <1 sec for all 50 stocks. Pipeline (with LLM) catches the remaining 20% |
 | 2026-05-09 | Two scoring modes, one module | Same `pre_screener.py` handles both buy-biased and action modes. DRY over separate modules |
+| 2026-05-09 | TOML for all config, not scattered Python constants | One file to rule them all. Users edit `config.toml`, never touch Python code |
+| 2026-05-09 | Config loader with bridge methods | `TradingConfig.pipeline_config` and `.broker_config` produce existing dict shapes — zero breaking changes |
+| 2026-05-09 | Pass config through function params, not globals | Functions like `resolve_trade()` accept `guardrails=` kwarg — explicit, testable, no hidden state |
+| 2026-05-09 | Three-doc strategy | Technical/non-technical/tracker — each audience gets what they need without wading through noise |
 
 ---
 
@@ -235,10 +251,12 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 
 | File | Type | Lines | Description |
 |---|---|---|---|
+| `config.toml` | New | 193 | Single config file — every tunable knob, heavily commented |
+| `tradingagents/config_loader.py` | New | 459 | TOML loader + TradingConfig with bridge methods |
 | `tradingagents/trading/__init__.py` | New | 68 | Factory + executor + screener exports |
-| `tradingagents/trading/executor.py` | New | 220 | Trade executor: rating → sized order with guardrails |
-| `tradingagents/trading/pre_screener.py` | New | 555 | Heuristic stock screener: 2 modes, keyword sentiment, no LLM |
-| `tradingagents/trading/daily_runner.py` | New | 352 | Daily orchestrator: pre-screen → review → pipeline → trade |
+| `tradingagents/trading/executor.py` | New | 296 | Trade executor: rating → sized order with config-driven guardrails |
+| `tradingagents/trading/pre_screener.py` | New | 574 | Heuristic stock screener: 2 modes, config-driven weights + keywords |
+| `tradingagents/trading/daily_runner.py` | New | 380 | Daily orchestrator: loads config.toml, passes all params through |
 | `tradingagents/trading/broker.py` | New | 106 | Abstract BrokerInterface + Order/Holding/PortfolioSnapshot |
 | `tradingagents/trading/paper_broker.py` | New | 361 | SQLite paper trading (real prices, virtual execution) |
 | `tradingagents/trading/angel_one.py` | New | 283 | Angel One SmartAPI (auth, LTP, orders, holdings, funds) |
@@ -246,6 +264,14 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | `tradingagents/network.py` | New | 65 | Auto-detect Walmart vs home network, proxy management |
 | `.env` | Modified | +4 | Angel One creds (no hardcoded proxy — auto-detected) |
 | `.gitignore` | Modified | +2 | Exclude `data/` (SQLite DB) |
+
+### Documentation
+
+| File | Type | Lines | Description |
+|---|---|---|---|
+| `HOW_IT_WORKS.md` | New | 375 | Plain-English guide for non-technical readers |
+| `HOW_TO_USE.md` | New | 969 | Developer guide: CLI, Python API, config, troubleshooting |
+| `PROJECT_TRACKER.md` | New | ~250 | This file — architecture decisions, phase tracking, test log |
 
 ### Phase 1: India Adaptation
 
@@ -312,4 +338,4 @@ Sentiment = `(positive_hits - negative_hits) / total_hits`, clamped to [-1.0, +1
 | TITAN.NS (+4.7%) | #3 (68.3) | **#1 (+64.2)** | 🟢 Accumulation + breakout + bullish news |
 | ADANIPORTS.NS (+1.6%) | #6 (51.6) | #6 (+34.3) | 🔴 Bearish news sentiment (-0.5) docked points |
 
-*Last updated: 2026-05-09T23:30 IST*
+*Last updated: 2026-05-09T24:50 IST*

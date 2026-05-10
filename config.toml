@@ -168,7 +168,7 @@ max_trade_value = 100000.0 # Cap any single trade at ₹1,00,000
 max_debate_rounds = 1          # Bull vs Bear debate rounds (more = slower but more thorough)
 max_risk_discuss_rounds = 1    # Risk team discussion rounds
 max_recur_limit = 100          # LangGraph recursion safety limit
-checkpoint_enabled = false     # Save state after each step for crash recovery
+checkpoint_enabled = true     # Save state after each step for crash recovery
 output_language = "English"    # Language for reports (internal debate stays English)
 
 
