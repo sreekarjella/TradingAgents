@@ -16,6 +16,7 @@ from typing import Any, Generator
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 
 # ---------------------------------------------------------------------------
 # Path setup — DBs live at ../data/ relative to this file
@@ -70,7 +71,7 @@ def pnl_color(value: float | None) -> str:
     return "text-[#2a8703]" if value > 0 else "text-[#ea1100]"
 
 
-def rating_badge(rating: str) -> str:
+def rating_badge(rating: str) -> Markup:
     """Return HTML badge for a rating."""
     r = (rating or "").strip().lower()
     color_map = {
@@ -86,24 +87,24 @@ def rating_badge(rating: str) -> str:
     }
     bg, fg = color_map.get(r, ("bg-[#d1d1d1]", "text-[#2e2f32]"))
     label = rating or "N/A"
-    return (
+    return Markup(
         f'<span class="inline-block px-2 py-0.5 rounded text-xs font-semibold '
         f'{bg} {fg}">{label}</span>'
     )
 
 
-def side_badge(side: str) -> str:
+def side_badge(side: str) -> Markup:
     """Buy/Sell badge."""
     if side == "BUY":
-        return '<span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-[#2a8703] text-white">BUY</span>'
-    return '<span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-[#ea1100] text-white">SELL</span>'
+        return Markup('<span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-[#2a8703] text-white">BUY</span>')
+    return Markup('<span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-[#ea1100] text-white">SELL</span>')
 
 
-def status_badge(status: str) -> str:
+def status_badge(status: str) -> Markup:
     """FILLED / REJECTED badge."""
     if status == "FILLED":
-        return '<span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-[#d4edda] text-[#2a8703]">FILLED</span>'
-    return '<span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-[#fdd] text-[#ea1100]">REJECTED</span>'
+        return Markup('<span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-[#d4edda] text-[#2a8703]">FILLED</span>')
+    return Markup('<span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-[#fdd] text-[#ea1100]">REJECTED</span>')
 
 
 # Register filters
