@@ -5,24 +5,24 @@
 <div class="space-y-6">
 
   <!-- Page heading -->
-  <h1 class="text-2xl font-bold text-wm-text">Order History</h1>
+  <h1 class="text-2xl font-bold text-wm-text dark:text-dark-text">Order History</h1>
 
   <!-- Summary stats -->
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-    <div class="bg-white border border-wm-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Total Orders</div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Total Orders</div>
       <div class="text-2xl font-bold text-wm-blue">{{ total_orders }}</div>
     </div>
-    <div class="bg-white border border-wm-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Buys</div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Buys</div>
       <div class="text-2xl font-bold text-wm-green">{{ total_buys }}</div>
     </div>
-    <div class="bg-white border border-wm-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Sells</div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Sells</div>
       <div class="text-2xl font-bold text-wm-red">{{ total_sells }}</div>
     </div>
-    <div class="bg-white border border-wm-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Realized P&amp;L</div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Realized P&amp;L</div>
       <div class="text-2xl font-bold {{ total_realized_pnl | pnl_color }}">
         {{ total_realized_pnl | fmt_inr }}
       </div>
@@ -31,11 +31,11 @@
 
   <!-- Filters -->
   <form method="get" action="/orders"
-        class="flex flex-wrap items-end gap-3 bg-wm-subtle rounded-lg p-4 border border-wm-border">
+        class="flex flex-wrap items-end gap-3 bg-wm-subtle dark:bg-dark-raised rounded-lg p-4 border border-wm-border dark:border-dark-border">
     <div>
-      <label for="filter-ticker" class="block text-xs font-medium text-gray-500 mb-1">Ticker</label>
+      <label for="filter-ticker" class="block text-xs font-medium text-gray-500 dark:text-dark-muted mb-1">Ticker</label>
       <select id="filter-ticker" name="ticker"
-              class="rounded-md border border-wm-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-wm-blue focus:outline-none">
+              class="rounded-md border border-wm-border dark:border-dark-border bg-white dark:bg-dark-card dark:text-dark-text px-3 py-2 text-sm focus:ring-2 focus:ring-wm-blue focus:outline-none">
         <option value="ALL" {% if filter_ticker == 'ALL' %}selected{% endif %}>All Tickers</option>
         {% for t in ticker_list %}
         <option value="{{ t }}" {% if filter_ticker == t %}selected{% endif %}>{{ t }}</option>
@@ -43,18 +43,18 @@
       </select>
     </div>
     <div>
-      <label for="filter-side" class="block text-xs font-medium text-gray-500 mb-1">Side</label>
+      <label for="filter-side" class="block text-xs font-medium text-gray-500 dark:text-dark-muted mb-1">Side</label>
       <select id="filter-side" name="side"
-              class="rounded-md border border-wm-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-wm-blue focus:outline-none">
+              class="rounded-md border border-wm-border dark:border-dark-border bg-white dark:bg-dark-card dark:text-dark-text px-3 py-2 text-sm focus:ring-2 focus:ring-wm-blue focus:outline-none">
         <option value="ALL" {% if filter_side == 'ALL' %}selected{% endif %}>All</option>
         <option value="BUY" {% if filter_side == 'BUY' %}selected{% endif %}>BUY</option>
         <option value="SELL" {% if filter_side == 'SELL' %}selected{% endif %}>SELL</option>
       </select>
     </div>
     <div>
-      <label for="filter-status" class="block text-xs font-medium text-gray-500 mb-1">Status</label>
+      <label for="filter-status" class="block text-xs font-medium text-gray-500 dark:text-dark-muted mb-1">Status</label>
       <select id="filter-status" name="status"
-              class="rounded-md border border-wm-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-wm-blue focus:outline-none">
+              class="rounded-md border border-wm-border dark:border-dark-border bg-white dark:bg-dark-card dark:text-dark-text px-3 py-2 text-sm focus:ring-2 focus:ring-wm-blue focus:outline-none">
         <option value="ALL" {% if filter_status == 'ALL' %}selected{% endif %}>All</option>
         <option value="FILLED" {% if filter_status == 'FILLED' %}selected{% endif %}>FILLED</option>
         <option value="REJECTED" {% if filter_status == 'REJECTED' %}selected{% endif %}>REJECTED</option>
@@ -65,7 +65,7 @@
       Apply Filters
     </button>
     <a href="/orders"
-       class="px-4 py-2 rounded-md text-sm font-medium border border-wm-border text-wm-text hover:bg-wm-subtle transition">
+       class="px-4 py-2 rounded-md text-sm font-medium border border-wm-border dark:border-dark-border text-wm-text dark:text-dark-text hover:bg-wm-subtle dark:hover:bg-dark-raised transition">
       Reset
     </a>
   </form>
@@ -73,14 +73,14 @@
   {% if orders | length == 0 %}
   <!-- Empty state -->
   <div class="flex flex-col items-center justify-center py-16 text-center">
-    <div class="w-16 h-16 rounded-full bg-wm-subtle flex items-center justify-center mb-4">
+    <div class="w-16 h-16 rounded-full bg-wm-subtle dark:bg-dark-raised flex items-center justify-center mb-4">
       <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
       </svg>
     </div>
-    <h2 class="text-lg font-semibold text-wm-text mb-1">No orders found</h2>
-    <p class="text-sm text-gray-500">
+    <h2 class="text-lg font-semibold text-wm-text dark:text-dark-text mb-1">No orders found</h2>
+    <p class="text-sm text-gray-500 dark:text-dark-muted">
       {% if filter_ticker != 'ALL' or filter_side != 'ALL' or filter_status != 'ALL' %}
         Try adjusting your filters.
       {% else %}
@@ -92,17 +92,17 @@
   {% else %}
 
   <!-- Orders table -->
-  <div class="bg-white border border-wm-border rounded-lg overflow-hidden">
-    <div class="px-5 py-3 border-b border-wm-border flex items-center justify-between">
-      <h2 class="text-base font-semibold text-wm-text">
+  <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg overflow-hidden">
+    <div class="px-5 py-3 border-b border-wm-border dark:border-dark-border flex items-center justify-between">
+      <h2 class="text-base font-semibold text-wm-text dark:text-dark-text">
         Orders
-        <span class="text-sm font-normal text-gray-500">({{ orders | length }} shown)</span>
+        <span class="text-sm font-normal text-gray-500 dark:text-dark-muted">({{ orders | length }} shown)</span>
       </h2>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-sm stripe-table" role="table">
         <thead>
-          <tr class="bg-wm-subtle text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <tr class="bg-wm-subtle dark:bg-dark-raised text-left text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">
             <th class="px-5 py-3" scope="col">Date</th>
             <th class="px-5 py-3" scope="col">Ticker</th>
             <th class="px-5 py-3" scope="col">Side</th>
@@ -114,13 +114,13 @@
             <th class="px-5 py-3" scope="col">Rationale</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-wm-border">
+        <tbody class="divide-y divide-wm-border dark:divide-dark-border">
           {% for o in orders %}
-          <tr class="hover:bg-blue-50/40 transition">
-            <td class="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
+          <tr class="hover:bg-blue-50/40 dark:hover:bg-blue-900/20 transition">
+            <td class="px-5 py-3 text-gray-500 dark:text-dark-muted text-xs whitespace-nowrap">
               {{ o.created_at[:10] }}
             </td>
-            <td class="px-5 py-3 font-semibold text-wm-text">
+            <td class="px-5 py-3 font-semibold text-wm-text dark:text-dark-text">
               {{ o.ticker.replace('.NS','') }}
             </td>
             <td class="px-5 py-3">{{ side_badge(o.side) }}</td>
@@ -131,7 +131,7 @@
             <td class="px-5 py-3 text-right font-mono font-medium {{ (o.pnl or 0) | pnl_color }}">
               {% if o.pnl %}{{ o.pnl | fmt_inr }}{% else %}—{% endif %}
             </td>
-            <td class="px-5 py-3 text-xs text-gray-500 max-w-xs truncate" title="{{ o.rationale or '' }}">
+            <td class="px-5 py-3 text-xs text-gray-500 dark:text-dark-muted max-w-xs truncate" title="{{ o.rationale or '' }}">
               {{ (o.rationale or '—')[:80] }}{% if (o.rationale or '')|length > 80 %}…{% endif %}
             </td>
           </tr>

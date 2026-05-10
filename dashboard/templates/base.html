@@ -9,6 +9,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
+      darkMode: 'class',
       theme: {
         extend: {
           colors: {
@@ -23,10 +24,26 @@
               subtle:  '#f8f8f8',
               border:  '#d1d1d1',
               border2: '#9b9b9b',
+            },
+            dark: {
+              bg:      '#121212',
+              card:    '#1e1e1e',
+              raised:  '#252525',
+              border:  '#374151',
+              text:    '#e5e5e5',
+              muted:   '#9ca3af',
             }
           }
         }
       }
+    }
+  </script>
+
+  <!-- Restore theme before paint to prevent flash -->
+  <script>
+    if (localStorage.getItem('theme') === 'dark' ||
+        (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
     }
   </script>
 
@@ -42,26 +59,30 @@
     /* Sidebar active link */
     .nav-active { background-color: #0053e2; color: #fff !important; }
     .nav-link:hover:not(.nav-active) { background-color: #f8f8f8; }
-    /* Smooth page transitions */
-    .htmx-settling { opacity: 0; }
-    .htmx-added    { opacity: 0; transition: opacity 300ms ease-in; }
+    .dark .nav-link:hover:not(.nav-active) { background-color: #252525; }
     /* Table striping */
     .stripe-table tbody tr:nth-child(even) { background-color: #f8f8f8; }
-    /* Scrollbar thin */
+    .dark .stripe-table tbody tr:nth-child(even) { background-color: #252525; }
+    /* Scrollbar */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-thumb { background: #d1d1d1; border-radius: 3px; }
+    .dark ::-webkit-scrollbar-thumb { background: #4b5563; }
+    /* Smooth theme transition */
+    html.transitioning, html.transitioning * {
+      transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease !important;
+    }
   </style>
 </head>
 
-<body class="h-full bg-white text-wm-text font-sans antialiased">
+<body class="h-full bg-white dark:bg-dark-bg text-wm-text dark:text-dark-text font-sans antialiased">
   <div class="flex h-full">
 
     <!-- ═══════════════════════ SIDEBAR ═══════════════════════ -->
     <aside id="sidebar"
-           class="hidden lg:flex flex-col w-56 border-r border-wm-border bg-white shrink-0">
+           class="hidden lg:flex flex-col w-56 border-r border-wm-border dark:border-dark-border bg-white dark:bg-dark-card shrink-0">
 
       <!-- Logo area -->
-      <div class="flex items-center gap-2 px-5 py-4 border-b border-wm-border">
+      <div class="flex items-center gap-2 px-5 py-4 border-b border-wm-border dark:border-dark-border">
         <div class="w-8 h-8 rounded bg-wm-blue flex items-center justify-center">
           <span class="text-white font-bold text-sm">TA</span>
         </div>
@@ -72,7 +93,7 @@
       <nav class="flex-1 py-3 px-3 space-y-1" role="navigation" aria-label="Main navigation">
         <a href="/today"
            class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition
-                  {% if page == 'today' %}nav-active{% else %}text-wm-text{% endif %}"
+                  {% if page == 'today' %}nav-active{% else %}text-wm-text dark:text-dark-text{% endif %}"
            aria-current="{% if page == 'today' %}page{% endif %}">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -83,7 +104,7 @@
 
         <a href="/portfolio"
            class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition
-                  {% if page == 'portfolio' %}nav-active{% else %}text-wm-text{% endif %}"
+                  {% if page == 'portfolio' %}nav-active{% else %}text-wm-text dark:text-dark-text{% endif %}"
            aria-current="{% if page == 'portfolio' %}page{% endif %}">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -94,7 +115,7 @@
 
         <a href="/orders"
            class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition
-                  {% if page == 'orders' %}nav-active{% else %}text-wm-text{% endif %}"
+                  {% if page == 'orders' %}nav-active{% else %}text-wm-text dark:text-dark-text{% endif %}"
            aria-current="{% if page == 'orders' %}page{% endif %}">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -105,7 +126,7 @@
 
         <a href="/history"
            class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition
-                  {% if page == 'history' %}nav-active{% else %}text-wm-text{% endif %}"
+                  {% if page == 'history' %}nav-active{% else %}text-wm-text dark:text-dark-text{% endif %}"
            aria-current="{% if page == 'history' %}page{% endif %}">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -116,7 +137,7 @@
 
         <a href="/runs"
            class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition
-                  {% if page == 'runs' %}nav-active{% else %}text-wm-text{% endif %}"
+                  {% if page == 'runs' %}nav-active{% else %}text-wm-text dark:text-dark-text{% endif %}"
            aria-current="{% if page == 'runs' %}page{% endif %}">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -125,11 +146,11 @@
           Run History
         </a>
 
-        <div class="my-2 border-t border-wm-border"></div>
+        <div class="my-2 border-t border-wm-border dark:border-dark-border"></div>
 
         <a href="/settings"
            class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition
-                  {% if page == 'settings' %}nav-active{% else %}text-wm-text{% endif %}"
+                  {% if page == 'settings' %}nav-active{% else %}text-wm-text dark:text-dark-text{% endif %}"
            aria-current="{% if page == 'settings' %}page{% endif %}">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -142,7 +163,7 @@
       </nav>
 
       <!-- Footer -->
-      <div class="px-5 py-3 border-t border-wm-border text-xs text-gray-400">
+      <div class="px-5 py-3 border-t border-wm-border dark:border-dark-border text-xs text-gray-400 dark:text-dark-muted">
         TradingAgents v1.0
       </div>
     </aside>
@@ -151,9 +172,9 @@
     <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
       <!-- ─── Sticky Header ─── -->
-      <header class="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-wm-border bg-white shrink-0 z-10">
+      <header class="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-wm-border dark:border-dark-border bg-white dark:bg-dark-card shrink-0 z-10">
         <!-- Mobile menu toggle -->
-        <button id="menu-toggle" class="lg:hidden p-2 rounded-md hover:bg-wm-subtle"
+        <button id="menu-toggle" class="lg:hidden p-2 rounded-md hover:bg-wm-subtle dark:hover:bg-dark-raised"
                 aria-label="Toggle navigation" onclick="toggleSidebar()">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
@@ -162,11 +183,11 @@
 
         <div class="flex items-center gap-6">
           <div>
-            <div class="text-xs text-gray-500 uppercase tracking-wider">Portfolio Value</div>
+            <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider">Portfolio Value</div>
             <div class="text-xl font-bold tracking-tight">{{ header.total_value | fmt_inr }}</div>
           </div>
           <div class="hidden sm:block">
-            <div class="text-xs text-gray-500 uppercase tracking-wider">P&amp;L</div>
+            <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider">P&amp;L</div>
             <div class="text-lg font-semibold {{ header.total_pnl | pnl_color }}">
               {{ header.total_pnl | fmt_inr }}
               <span class="text-sm">({{ header.total_pnl_pct | fmt_pct }})</span>
@@ -174,18 +195,36 @@
           </div>
         </div>
 
-        <div class="hidden md:flex items-center gap-4 text-sm text-gray-500">
-          <span>Cash: <strong class="text-wm-text">{{ header.cash | fmt_inr }}</strong></span>
-          <span class="w-px h-4 bg-wm-border"></span>
-          <span>Invested: <strong class="text-wm-text">{{ header.invested | fmt_inr }}</strong></span>
+        <div class="flex items-center gap-4">
+          <div class="hidden md:flex items-center gap-4 text-sm text-gray-500 dark:text-dark-muted">
+            <span>Cash: <strong class="text-wm-text dark:text-dark-text">{{ header.cash | fmt_inr }}</strong></span>
+            <span class="w-px h-4 bg-wm-border dark:bg-dark-border"></span>
+            <span>Invested: <strong class="text-wm-text dark:text-dark-text">{{ header.invested | fmt_inr }}</strong></span>
+          </div>
+
+          <!-- Theme toggle -->
+          <button id="theme-toggle" onclick="toggleTheme()"
+                  class="p-2 rounded-md hover:bg-wm-subtle dark:hover:bg-dark-raised transition"
+                  aria-label="Toggle dark mode" title="Toggle dark mode">
+            <!-- Sun icon (shown in dark mode) -->
+            <svg class="w-5 h-5 hidden dark:block text-wm-spark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+            </svg>
+            <!-- Moon icon (shown in light mode) -->
+            <svg class="w-5 h-5 block dark:hidden text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+            </svg>
+          </button>
         </div>
       </header>
 
       <!-- ─── Mobile sidebar overlay ─── -->
       <div id="sidebar-overlay" class="hidden fixed inset-0 z-40 lg:hidden">
         <div class="absolute inset-0 bg-black/30" onclick="toggleSidebar()"></div>
-        <aside class="relative w-64 h-full bg-white shadow-xl flex flex-col">
-          <div class="flex items-center gap-2 px-5 py-4 border-b border-wm-border">
+        <aside class="relative w-64 h-full bg-white dark:bg-dark-card shadow-xl flex flex-col">
+          <div class="flex items-center gap-2 px-5 py-4 border-b border-wm-border dark:border-dark-border">
             <div class="w-8 h-8 rounded bg-wm-blue flex items-center justify-center">
               <span class="text-white font-bold text-sm">TA</span>
             </div>
@@ -198,7 +237,7 @@
             <a href="/orders"    class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'orders' %}nav-active{% endif %}">📋 Orders</a>
             <a href="/history"   class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'history' %}nav-active{% endif %}">📈 Performance</a>
             <a href="/runs"      class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'runs' %}nav-active{% endif %}">🕒 Run History</a>
-            <div class="my-2 border-t border-wm-border"></div>
+            <div class="my-2 border-t border-wm-border dark:border-dark-border"></div>
             <a href="/settings"  class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'settings' %}nav-active{% endif %}">⚙️ Settings</a>
           </nav>
         </aside>
@@ -213,8 +252,15 @@
 
   <script>
     function toggleSidebar() {
-      const overlay = document.getElementById('sidebar-overlay');
-      overlay.classList.toggle('hidden');
+      document.getElementById('sidebar-overlay').classList.toggle('hidden');
+    }
+
+    function toggleTheme() {
+      const html = document.documentElement;
+      html.classList.add('transitioning');
+      html.classList.toggle('dark');
+      localStorage.setItem('theme', html.classList.contains('dark') ? 'dark' : 'light');
+      setTimeout(() => html.classList.remove('transitioning'), 250);
     }
   </script>
   {% block scripts %}{% endblock %}

@@ -6,50 +6,50 @@
 
   <!-- Page heading -->
   <div>
-    <h1 class="text-2xl font-bold text-wm-text">Settings</h1>
-    <p class="text-sm text-gray-500 mt-0.5">Manage your paper trading environment</p>
+    <h1 class="text-2xl font-bold text-wm-text dark:text-dark-text">Settings</h1>
+    <p class="text-sm text-gray-500 dark:text-dark-muted mt-0.5">Manage your paper trading environment</p>
   </div>
 
   <!-- Current state card -->
-  <div class="bg-white border border-wm-border rounded-lg p-5 space-y-3">
-    <h2 class="text-base font-semibold text-wm-text">Current State</h2>
+  <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-5 space-y-3">
+    <h2 class="text-base font-semibold text-wm-text dark:text-dark-text">Current State</h2>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
       <div>
-        <div class="text-xs text-gray-500 uppercase tracking-wider">Orders</div>
-        <div class="text-lg font-bold text-wm-text">{{ stats.orders }}</div>
+        <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider">Orders</div>
+        <div class="text-lg font-bold text-wm-text dark:text-dark-text">{{ stats.orders }}</div>
       </div>
       <div>
-        <div class="text-xs text-gray-500 uppercase tracking-wider">Holdings</div>
-        <div class="text-lg font-bold text-wm-text">{{ stats.holdings }}</div>
+        <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider">Holdings</div>
+        <div class="text-lg font-bold text-wm-text dark:text-dark-text">{{ stats.holdings }}</div>
       </div>
       <div>
-        <div class="text-xs text-gray-500 uppercase tracking-wider">Snapshots</div>
-        <div class="text-lg font-bold text-wm-text">{{ stats.snapshots }}</div>
+        <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider">Snapshots</div>
+        <div class="text-lg font-bold text-wm-text dark:text-dark-text">{{ stats.snapshots }}</div>
       </div>
       <div>
-        <div class="text-xs text-gray-500 uppercase tracking-wider">Run Logs</div>
-        <div class="text-lg font-bold text-wm-text">{{ stats.run_logs }}</div>
+        <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider">Run Logs</div>
+        <div class="text-lg font-bold text-wm-text dark:text-dark-text">{{ stats.run_logs }}</div>
       </div>
     </div>
-    <div class="text-sm text-gray-500 pt-1 border-t border-wm-border">
-      Initial capital: <strong class="text-wm-text">{{ header.initial_capital | fmt_inr }}</strong>
+    <div class="text-sm text-gray-500 dark:text-dark-muted pt-1 border-t border-wm-border dark:border-dark-border">
+      Initial capital: <strong class="text-wm-text dark:text-dark-text">{{ header.initial_capital | fmt_inr }}</strong>
       &nbsp;·&nbsp;
-      Cash: <strong class="text-wm-text">{{ header.cash | fmt_inr }}</strong>
+      Cash: <strong class="text-wm-text dark:text-dark-text">{{ header.cash | fmt_inr }}</strong>
     </div>
   </div>
 
   <!-- Reset section -->
-  <div class="bg-white border-2 border-[#ea1100]/30 rounded-lg p-5 space-y-4">
+  <div class="bg-white dark:bg-dark-card border-2 border-[#ea1100]/30 rounded-lg p-5 space-y-4">
     <div class="flex items-start gap-3">
-      <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center shrink-0 mt-0.5">
+      <div class="w-10 h-10 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center shrink-0 mt-0.5">
         <svg class="w-5 h-5 text-[#ea1100]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
         </svg>
       </div>
       <div>
-        <h2 class="text-base font-semibold text-wm-text">Reset Paper Trading</h2>
-        <p class="text-sm text-gray-500 mt-1">
+        <h2 class="text-base font-semibold text-wm-text dark:text-dark-text">Reset Paper Trading</h2>
+        <p class="text-sm text-gray-500 dark:text-dark-muted mt-1">
           This will <strong>permanently delete</strong> all orders, holdings, daily snapshots,
           and run logs. Your portfolio will be reset to fresh starting capital.
           This action cannot be undone.
@@ -59,36 +59,38 @@
 
     <form id="reset-form" class="space-y-4 pl-[52px]">
       <div>
-        <label for="capital" class="block text-sm font-medium text-wm-text mb-1">
+        <label for="capital" class="block text-sm font-medium text-wm-text dark:text-dark-text mb-1">
           Starting Capital (₹)
         </label>
         <input type="number" id="capital" name="capital"
                value="{{ header.initial_capital | int }}"
                min="10000" step="10000"
-               class="w-full sm:w-64 px-3 py-2 border border-wm-border rounded-md text-sm
+               class="w-full sm:w-64 px-3 py-2 border border-wm-border dark:border-dark-border rounded-md text-sm
+                      bg-white dark:bg-dark-raised dark:text-dark-text
                       focus:outline-none focus:ring-2 focus:ring-[#0053e2] focus:border-transparent"
                aria-describedby="capital-help">
-        <p id="capital-help" class="text-xs text-gray-400 mt-1">
+        <p id="capital-help" class="text-xs text-gray-400 dark:text-dark-muted mt-1">
           Minimum ₹10,000. This becomes your starting cash balance.
         </p>
       </div>
 
       <!-- Confirmation input -->
       <div>
-        <label for="confirm" class="block text-sm font-medium text-wm-text mb-1">
-          Type <code class="bg-wm-subtle px-1.5 py-0.5 rounded text-xs font-mono text-[#ea1100]">RESET</code> to confirm
+        <label for="confirm" class="block text-sm font-medium text-wm-text dark:text-dark-text mb-1">
+          Type <code class="bg-wm-subtle dark:bg-dark-raised px-1.5 py-0.5 rounded text-xs font-mono text-[#ea1100]">RESET</code> to confirm
         </label>
         <input type="text" id="confirm" name="confirm"
                placeholder="Type RESET here"
                autocomplete="off"
-               class="w-full sm:w-64 px-3 py-2 border border-wm-border rounded-md text-sm
+               class="w-full sm:w-64 px-3 py-2 border border-wm-border dark:border-dark-border rounded-md text-sm
+                      bg-white dark:bg-dark-raised dark:text-dark-text
                       focus:outline-none focus:ring-2 focus:ring-[#ea1100] focus:border-transparent">
       </div>
 
       <button type="button" id="reset-btn" disabled
               class="px-5 py-2.5 rounded-md text-sm font-semibold text-white
-                     bg-[#ea1100] hover:bg-[#c00e00] disabled:bg-gray-300 disabled:cursor-not-allowed
-                     transition focus:outline-none focus:ring-2 focus:ring-[#ea1100] focus:ring-offset-2">
+                     bg-[#ea1100] hover:bg-[#c00e00] disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:cursor-not-allowed
+                     transition focus:outline-none focus:ring-2 focus:ring-[#ea1100] focus:ring-offset-2 dark:focus:ring-offset-dark-bg">
         🗑️ Reset Everything
       </button>
     </form>
@@ -98,15 +100,15 @@
   </div>
 
   <!-- Seed demo data section -->
-  <div class="bg-white border border-wm-border rounded-lg p-5 space-y-3">
-    <h2 class="text-base font-semibold text-wm-text">Load Demo Data</h2>
-    <p class="text-sm text-gray-500">
+  <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-5 space-y-3">
+    <h2 class="text-base font-semibold text-wm-text dark:text-dark-text">Load Demo Data</h2>
+    <p class="text-sm text-gray-500 dark:text-dark-muted">
       Populate the database with 30 days of realistic demo data for testing the dashboard.
       Useful after a reset to see how things look with data.
     </p>
     <button type="button" id="seed-btn"
-            class="px-4 py-2 rounded-md text-sm font-medium border border-wm-border
-                   text-wm-text hover:bg-wm-subtle transition">
+            class="px-4 py-2 rounded-md text-sm font-medium border border-wm-border dark:border-dark-border
+                   text-wm-text dark:text-dark-text hover:bg-wm-subtle dark:hover:bg-dark-raised transition">
       🌱 Seed Demo Data
     </button>
     <div id="seed-result" class="hidden"></div>

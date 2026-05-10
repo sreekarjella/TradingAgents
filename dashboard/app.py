@@ -68,7 +68,7 @@ def fmt_duration(secs: float | None) -> str:
 def pnl_color(value: float | None) -> str:
     """Return Walmart-themed CSS class for profit/loss."""
     if value is None or value == 0:
-        return "text-gray-500"
+        return "text-gray-500 dark:text-dark-muted"
     return "text-[#2a8703]" if value > 0 else "text-[#ea1100]"
 
 

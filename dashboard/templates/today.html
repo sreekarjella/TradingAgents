@@ -7,8 +7,8 @@
   <!-- Page heading -->
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-bold text-wm-text">Today's Run</h1>
-      <p class="text-sm text-gray-500 mt-0.5">{{ today_str }}</p>
+      <h1 class="text-2xl font-bold text-wm-text dark:text-dark-text">Today's Run</h1>
+      <p class="text-sm text-gray-500 dark:text-dark-muted mt-0.5">{{ today_str }}</p>
     </div>
     <button onclick="window.location.reload()"
             class="px-4 py-2 rounded-md text-sm font-medium bg-wm-blue text-white hover:bg-wm-blueH transition"
@@ -20,15 +20,16 @@
   {% if total_runs == 0 %}
   <!-- Empty state -->
   <div class="flex flex-col items-center justify-center py-20 text-center">
-    <div class="w-16 h-16 rounded-full bg-wm-subtle flex items-center justify-center mb-4">
+    <div class="w-16 h-16 rounded-full bg-wm-subtle dark:bg-dark-raised flex items-center justify-center mb-4">
       <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M13 10V3L4 14h7v7l9-11h-7z"/>
       </svg>
     </div>
-    <h2 class="text-lg font-semibold text-wm-text mb-1">No runs today</h2>
-    <p class="text-sm text-gray-500 max-w-md">
-      The pipeline hasn't run yet today. Execute <code class="bg-wm-subtle px-1.5 py-0.5 rounded text-xs font-mono">python run_pipeline.py</code>
+    <h2 class="text-lg font-semibold text-wm-text dark:text-dark-text mb-1">No runs today</h2>
+    <p class="text-sm text-gray-500 dark:text-dark-muted max-w-md">
+      The pipeline hasn't run yet today. Execute
+      <code class="bg-wm-subtle dark:bg-dark-raised px-1.5 py-0.5 rounded text-xs font-mono">python run_pipeline.py</code>
       to analyze tickers and populate this page.
     </p>
   </div>
@@ -37,37 +38,37 @@
 
   <!-- Status bar cards -->
   <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-    <div class="bg-white border border-wm-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Total Runs</div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Total Runs</div>
       <div class="text-2xl font-bold text-wm-blue">{{ total_runs }}</div>
     </div>
-    <div class="bg-white border border-wm-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Successes</div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Successes</div>
       <div class="text-2xl font-bold text-wm-green">{{ successes }}</div>
     </div>
-    <div class="bg-white border border-wm-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Errors</div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Errors</div>
       <div class="text-2xl font-bold text-wm-red">{{ errors }}</div>
     </div>
-    <div class="bg-white border border-wm-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Duplicates</div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Duplicates</div>
       <div class="text-2xl font-bold text-gray-500">{{ dupes }}</div>
     </div>
-    <div class="bg-white border border-wm-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Total Runtime</div>
-      <div class="text-2xl font-bold text-wm-text">{{ total_runtime | fmt_duration }}</div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Total Runtime</div>
+      <div class="text-2xl font-bold text-wm-text dark:text-dark-text">{{ total_runtime | fmt_duration }}</div>
     </div>
   </div>
 
   <!-- Pipeline Results Table -->
-  <div class="bg-white border border-wm-border rounded-lg overflow-hidden">
-    <div class="px-5 py-3 border-b border-wm-border">
-      <h2 class="text-base font-semibold text-wm-text">Pipeline Results</h2>
+  <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg overflow-hidden">
+    <div class="px-5 py-3 border-b border-wm-border dark:border-dark-border">
+      <h2 class="text-base font-semibold text-wm-text dark:text-dark-text">Pipeline Results</h2>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-sm stripe-table" role="table">
         <thead>
-          <tr class="bg-wm-subtle text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <tr class="bg-wm-subtle dark:bg-dark-raised text-left text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">
             <th class="px-5 py-3" scope="col">Ticker</th>
             <th class="px-5 py-3" scope="col">Rating</th>
             <th class="px-5 py-3" scope="col">Trade</th>
@@ -77,10 +78,10 @@
             <th class="px-5 py-3" scope="col">Time</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-wm-border">
+        <tbody class="divide-y divide-wm-border dark:divide-dark-border">
           {% for run in runs %}
-          <tr class="hover:bg-blue-50/40 transition">
-            <td class="px-5 py-3 font-medium text-wm-text">{{ run.ticker }}</td>
+          <tr class="hover:bg-blue-50/40 dark:hover:bg-blue-900/20 transition">
+            <td class="px-5 py-3 font-medium text-wm-text dark:text-dark-text">{{ run.ticker }}</td>
             <td class="px-5 py-3">{{ rating_badge(run.rating) }}</td>
             <td class="px-5 py-3">
               {% if run.trade_side %}
@@ -92,7 +93,7 @@
             <td class="px-5 py-3 text-right font-mono">
               {{ run.trade_qty if run.trade_qty else '—' }}
             </td>
-            <td class="px-5 py-3 text-right font-mono text-gray-500">
+            <td class="px-5 py-3 text-right font-mono text-gray-500 dark:text-dark-muted">
               {{ run.duration_secs | fmt_duration }}
             </td>
             <td class="px-5 py-3">
@@ -113,7 +114,7 @@
                 </span>
               {% endif %}
             </td>
-            <td class="px-5 py-3 text-gray-500 text-xs">
+            <td class="px-5 py-3 text-gray-500 dark:text-dark-muted text-xs">
               {{ run.created_at[11:19] if run.created_at|length > 11 else run.created_at }}
             </td>
           </tr>
@@ -126,13 +127,13 @@
   <!-- Error details (if any) -->
   {% set error_runs = runs | selectattr('error') | list %}
   {% if error_runs %}
-  <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+  <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 rounded-lg p-4">
     <h3 class="text-sm font-semibold text-wm-red mb-2">Error Details</h3>
     <div class="space-y-2">
       {% for r in error_runs %}
       <div class="text-xs">
-        <span class="font-medium text-wm-text">{{ r.ticker }}:</span>
-        <span class="text-gray-600">{{ r.error }}</span>
+        <span class="font-medium text-wm-text dark:text-dark-text">{{ r.ticker }}:</span>
+        <span class="text-gray-600 dark:text-dark-muted">{{ r.error }}</span>
       </div>
       {% endfor %}
     </div>

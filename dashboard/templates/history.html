@@ -5,19 +5,19 @@
 <div class="space-y-6">
 
   <!-- Page heading -->
-  <h1 class="text-2xl font-bold text-wm-text">Performance</h1>
+  <h1 class="text-2xl font-bold text-wm-text dark:text-dark-text">Performance</h1>
 
   {% if not has_data %}
   <!-- Empty state -->
   <div class="flex flex-col items-center justify-center py-20 text-center">
-    <div class="w-16 h-16 rounded-full bg-wm-subtle flex items-center justify-center mb-4">
+    <div class="w-16 h-16 rounded-full bg-wm-subtle dark:bg-dark-raised flex items-center justify-center mb-4">
       <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/>
       </svg>
     </div>
-    <h2 class="text-lg font-semibold text-wm-text mb-1">No performance data yet</h2>
-    <p class="text-sm text-gray-500 max-w-md">
+    <h2 class="text-lg font-semibold text-wm-text dark:text-dark-text mb-1">No performance data yet</h2>
+    <p class="text-sm text-gray-500 dark:text-dark-muted max-w-md">
       Run the pipeline for a few days to build up daily snapshots.
       Performance charts will appear here automatically.
     </p>
@@ -27,41 +27,41 @@
 
   <!-- Cumulative stats -->
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-    <div class="bg-white border border-wm-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Total Return</div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Total Return</div>
       <div class="text-2xl font-bold {{ total_return_pct | pnl_color }}">
         {{ total_return_pct | fmt_pct }}
       </div>
     </div>
-    <div class="bg-white border border-wm-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Alpha vs Benchmark</div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Alpha vs Benchmark</div>
       <div class="text-2xl font-bold {{ alpha | pnl_color }}">
         {{ alpha | fmt_pct }}
       </div>
     </div>
-    <div class="bg-white border border-wm-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Max Drawdown</div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Max Drawdown</div>
       <div class="text-2xl font-bold text-wm-red">
         -{{ "%.2f" | format(max_drawdown) }}%
       </div>
     </div>
-    <div class="bg-white border border-wm-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Data Points</div>
-      <div class="text-2xl font-bold text-wm-text">{{ snapshot_count }} days</div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Data Points</div>
+      <div class="text-2xl font-bold text-wm-text dark:text-dark-text">{{ snapshot_count }} days</div>
     </div>
   </div>
 
   <!-- Portfolio Value Chart -->
-  <div class="bg-white border border-wm-border rounded-lg p-5">
-    <h2 class="text-base font-semibold text-wm-text mb-4">Portfolio Value vs Benchmark</h2>
+  <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-5">
+    <h2 class="text-base font-semibold text-wm-text dark:text-dark-text mb-4">Portfolio Value vs Benchmark</h2>
     <div style="height: 350px; position: relative;">
       <canvas id="valueChart"></canvas>
     </div>
   </div>
 
   <!-- Daily Returns Chart -->
-  <div class="bg-white border border-wm-border rounded-lg p-5">
-    <h2 class="text-base font-semibold text-wm-text mb-4">Daily Returns</h2>
+  <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-5">
+    <h2 class="text-base font-semibold text-wm-text dark:text-dark-text mb-4">Daily Returns</h2>
     <div style="height: 250px; position: relative;">
       <canvas id="returnsChart"></canvas>
     </div>
@@ -79,6 +79,10 @@ document.addEventListener('DOMContentLoaded', function() {
   const totalValues = {{ total_values | tojson }};
   const benchmarkValues = {{ benchmark_values | tojson }};
   const dailyReturns = {{ daily_returns | tojson }};
+  const isDark = document.documentElement.classList.contains('dark');
+
+  const gridColor = isDark ? '#374151' : '#f0f0f0';
+  const tickColor = isDark ? '#9ca3af' : '#9b9b9b';
 
   // ─── Portfolio Value Line Chart ───
   new Chart(document.getElementById('valueChart'), {
@@ -90,7 +94,7 @@ document.addEventListener('DOMContentLoaded', function() {
           label: 'Portfolio',
           data: totalValues,
           borderColor: '#0053e2',
-          backgroundColor: 'rgba(0,83,226,0.08)',
+          backgroundColor: isDark ? 'rgba(0,83,226,0.15)' : 'rgba(0,83,226,0.08)',
           fill: true,
           tension: 0.3,
           pointRadius: 2,
@@ -118,7 +122,11 @@ document.addEventListener('DOMContentLoaded', function() {
       plugins: {
         legend: {
           position: 'top',
-          labels: { usePointStyle: true, padding: 20, font: { size: 12 } }
+          labels: {
+            usePointStyle: true, padding: 20,
+            font: { size: 12 },
+            color: isDark ? '#e5e5e5' : '#2e2f32',
+          }
         },
         tooltip: {
           callbacks: {
@@ -132,11 +140,11 @@ document.addEventListener('DOMContentLoaded', function() {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { maxTicksLimit: 10, font: { size: 11 }, color: '#9b9b9b' }
+          ticks: { maxTicksLimit: 10, font: { size: 11 }, color: tickColor }
         },
         y: {
           position: 'left',
-          grid: { color: '#f0f0f0' },
+          grid: { color: gridColor },
           ticks: {
             font: { size: 11 }, color: '#0053e2',
             callback: v => '₹' + (v/1000).toFixed(0) + 'K'
@@ -187,12 +195,12 @@ document.addEventListener('DOMContentLoaded', function() {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { maxTicksLimit: 10, font: { size: 11 }, color: '#9b9b9b' }
+          ticks: { maxTicksLimit: 10, font: { size: 11 }, color: tickColor }
         },
         y: {
-          grid: { color: '#f0f0f0' },
+          grid: { color: gridColor },
           ticks: {
-            font: { size: 11 }, color: '#9b9b9b',
+            font: { size: 11 }, color: tickColor,
             callback: v => v.toFixed(1) + '%'
           }
         }
