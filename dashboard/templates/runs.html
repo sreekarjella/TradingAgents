@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Run History — Trading Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <!-- Page heading -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-wm-text">Run History</h1>
+      <p class="text-sm text-gray-500 mt-0.5">{{ total_count }} total runs across all days</p>
+    </div>
+  </div>
+
+  {% if total_count == 0 %}
+  <!-- Empty state -->
+  <div class="flex flex-col items-center justify-center py-20 text-center">
+    <div class="w-16 h-16 rounded-full bg-wm-subtle flex items-center justify-center mb-4">
+      <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+    </div>
+    <h2 class="text-lg font-semibold text-wm-text mb-1">No run history</h2>
+    <p class="text-sm text-gray-500">Pipeline runs will be logged here as they execute.</p>
+  </div>
+
+  {% else %}
+
+  <!-- Grouped by date -->
+  {% for d, runs in grouped.items() %}
+  <div class="bg-white border border-wm-border rounded-lg overflow-hidden">
+    <!-- Date header (collapsible) -->
+    <button type="button"
+            class="w-full flex items-center justify-between px-5 py-3 bg-wm-subtle border-b border-wm-border hover:bg-gray-100 transition cursor-pointer"
+            onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.chevron').classList.toggle('rotate-180');"
+            aria-expanded="true">
+      <div class="flex items-center gap-3">
+        <span class="text-base font-semibold text-wm-text">📅 {{ d }}</span>
+        <span class="text-xs px-2 py-0.5 rounded-full bg-wm-blue text-white font-medium">
+          {{ date_stats[d].count }} runs
+        </span>
+      </div>
+      <div class="flex items-center gap-4">
+        <span class="text-xs text-gray-500">
+          Avg: {{ date_stats[d].avg_duration | fmt_duration }} •
+          Success: {{ "%.0f" | format(date_stats[d].success_rate) }}%
+        </span>
+        <svg class="w-4 h-4 text-gray-400 chevron transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </div>
+    </button>
+
+    <!-- Runs table -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm stripe-table" role="table">
+        <thead>
+          <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th class="px-5 py-2.5" scope="col">Ticker</th>
+            <th class="px-5 py-2.5" scope="col">Rating</th>
+            <th class="px-5 py-2.5" scope="col">Trade</th>
+            <th class="px-5 py-2.5 text-right" scope="col">Qty</th>
+            <th class="px-5 py-2.5 text-right" scope="col">Duration</th>
+            <th class="px-5 py-2.5" scope="col">Error</th>
+            <th class="px-5 py-2.5" scope="col">Time</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-wm-border">
+          {% for r in runs %}
+          <tr class="hover:bg-blue-50/40 transition">
+            <td class="px-5 py-2.5 font-medium text-wm-text">{{ r.ticker }}</td>
+            <td class="px-5 py-2.5">{{ rating_badge(r.rating) }}</td>
+            <td class="px-5 py-2.5">
+              {% if r.trade_side %}{{ side_badge(r.trade_side) }}{% else %}<span class="text-gray-400 text-xs">—</span>{% endif %}
+            </td>
+            <td class="px-5 py-2.5 text-right font-mono">{{ r.trade_qty if r.trade_qty else '—' }}</td>
+            <td class="px-5 py-2.5 text-right font-mono text-gray-500">{{ r.duration_secs | fmt_duration }}</td>
+            <td class="px-5 py-2.5 text-xs max-w-xs truncate">
+              {% if r.error %}
+                <span class="text-wm-red" title="{{ r.error }}">{{ r.error[:60] }}{% if r.error|length > 60 %}…{% endif %}</span>
+              {% else %}
+                <span class="text-wm-green">✓</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-2.5 text-gray-500 text-xs">
+              {{ r.created_at[11:19] if r.created_at|length > 11 else r.created_at }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- Pagination -->
+  {% if total_pages > 1 %}
+  <nav class="flex items-center justify-center gap-2 py-4" aria-label="Pagination">
+    {% if page_num > 1 %}
+    <a href="/runs?page={{ page_num - 1 }}"
+       class="px-3 py-2 rounded-md text-sm font-medium border border-wm-border text-wm-text hover:bg-wm-subtle transition">
+      ← Previous
+    </a>
+    {% endif %}
+
+    <span class="px-3 py-2 text-sm text-gray-500">
+      Page {{ page_num }} of {{ total_pages }}
+    </span>
+
+    {% if page_num < total_pages %}
+    <a href="/runs?page={{ page_num + 1 }}"
+       class="px-3 py-2 rounded-md text-sm font-medium border border-wm-border text-wm-text hover:bg-wm-subtle transition">
+      Next →
+    </a>
+    {% endif %}
+  </nav>
+  {% endif %}
+
+  {% endif %}
+</div>
+{% endblock %}

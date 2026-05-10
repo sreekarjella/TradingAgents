@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Trading Dashboard{% endblock %}</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            wm: {
+              blue:    '#0053e2',
+              blueH:   '#003da8',
+              spark:   '#ffc220',
+              sparkD:  '#995213',
+              green:   '#2a8703',
+              red:     '#ea1100',
+              text:    '#2e2f32',
+              subtle:  '#f8f8f8',
+              border:  '#d1d1d1',
+              border2: '#9b9b9b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@2.0.4"
+          integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+"
+          crossorigin="anonymous"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* Sidebar active link */
+    .nav-active { background-color: #0053e2; color: #fff !important; }
+    .nav-link:hover:not(.nav-active) { background-color: #f8f8f8; }
+    /* Smooth page transitions */
+    .htmx-settling { opacity: 0; }
+    .htmx-added    { opacity: 0; transition: opacity 300ms ease-in; }
+    /* Table striping */
+    .stripe-table tbody tr:nth-child(even) { background-color: #f8f8f8; }
+    /* Scrollbar thin */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: #d1d1d1; border-radius: 3px; }
+  </style>
+</head>
+
+<body class="h-full bg-white text-wm-text font-sans antialiased">
+  <div class="flex h-full">
+
+    <!-- ═══════════════════════ SIDEBAR ═══════════════════════ -->
+    <aside id="sidebar"
+           class="hidden lg:flex flex-col w-56 border-r border-wm-border bg-white shrink-0">
+
+      <!-- Logo area -->
+      <div class="flex items-center gap-2 px-5 py-4 border-b border-wm-border">
+        <div class="w-8 h-8 rounded bg-wm-blue flex items-center justify-center">
+          <span class="text-white font-bold text-sm">TA</span>
+        </div>
+        <span class="font-bold text-base tracking-tight">TradingAgents</span>
+      </div>
+
+      <!-- Nav links -->
+      <nav class="flex-1 py-3 px-3 space-y-1" role="navigation" aria-label="Main navigation">
+        <a href="/today"
+           class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition
+                  {% if page == 'today' %}nav-active{% else %}text-wm-text{% endif %}"
+           aria-current="{% if page == 'today' %}page{% endif %}">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+          Today's Run
+        </a>
+
+        <a href="/portfolio"
+           class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition
+                  {% if page == 'portfolio' %}nav-active{% else %}text-wm-text{% endif %}"
+           aria-current="{% if page == 'portfolio' %}page{% endif %}">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M3 10h4v11H3zM10 3h4v18h-4zM17 7h4v14h-4z"/>
+          </svg>
+          Portfolio
+        </a>
+
+        <a href="/orders"
+           class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition
+                  {% if page == 'orders' %}nav-active{% else %}text-wm-text{% endif %}"
+           aria-current="{% if page == 'orders' %}page{% endif %}">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+          </svg>
+          Orders
+        </a>
+
+        <a href="/history"
+           class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition
+                  {% if page == 'history' %}nav-active{% else %}text-wm-text{% endif %}"
+           aria-current="{% if page == 'history' %}page{% endif %}">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/>
+          </svg>
+          Performance
+        </a>
+
+        <a href="/runs"
+           class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition
+                  {% if page == 'runs' %}nav-active{% else %}text-wm-text{% endif %}"
+           aria-current="{% if page == 'runs' %}page{% endif %}">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          Run History
+        </a>
+      </nav>
+
+      <!-- Footer -->
+      <div class="px-5 py-3 border-t border-wm-border text-xs text-gray-400">
+        TradingAgents v1.0
+      </div>
+    </aside>
+
+    <!-- ═══════════════════════ MAIN AREA ═══════════════════════ -->
+    <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+      <!-- ─── Sticky Header ─── -->
+      <header class="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-wm-border bg-white shrink-0 z-10">
+        <!-- Mobile menu toggle -->
+        <button id="menu-toggle" class="lg:hidden p-2 rounded-md hover:bg-wm-subtle"
+                aria-label="Toggle navigation" onclick="toggleSidebar()">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+          </svg>
+        </button>
+
+        <div class="flex items-center gap-6">
+          <div>
+            <div class="text-xs text-gray-500 uppercase tracking-wider">Portfolio Value</div>
+            <div class="text-xl font-bold tracking-tight">{{ header.total_value | fmt_inr }}</div>
+          </div>
+          <div class="hidden sm:block">
+            <div class="text-xs text-gray-500 uppercase tracking-wider">P&amp;L</div>
+            <div class="text-lg font-semibold {{ header.total_pnl | pnl_color }}">
+              {{ header.total_pnl | fmt_inr }}
+              <span class="text-sm">({{ header.total_pnl_pct | fmt_pct }})</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="hidden md:flex items-center gap-4 text-sm text-gray-500">
+          <span>Cash: <strong class="text-wm-text">{{ header.cash | fmt_inr }}</strong></span>
+          <span class="w-px h-4 bg-wm-border"></span>
+          <span>Invested: <strong class="text-wm-text">{{ header.invested | fmt_inr }}</strong></span>
+        </div>
+      </header>
+
+      <!-- ─── Mobile sidebar overlay ─── -->
+      <div id="sidebar-overlay" class="hidden fixed inset-0 z-40 lg:hidden">
+        <div class="absolute inset-0 bg-black/30" onclick="toggleSidebar()"></div>
+        <aside class="relative w-64 h-full bg-white shadow-xl flex flex-col">
+          <div class="flex items-center gap-2 px-5 py-4 border-b border-wm-border">
+            <div class="w-8 h-8 rounded bg-wm-blue flex items-center justify-center">
+              <span class="text-white font-bold text-sm">TA</span>
+            </div>
+            <span class="font-bold text-base">TradingAgents</span>
+            <button class="ml-auto p-1" onclick="toggleSidebar()" aria-label="Close menu">✕</button>
+          </div>
+          <nav class="flex-1 py-3 px-3 space-y-1">
+            <a href="/today"     class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'today' %}nav-active{% endif %}">⚡ Today's Run</a>
+            <a href="/portfolio" class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'portfolio' %}nav-active{% endif %}">📊 Portfolio</a>
+            <a href="/orders"    class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'orders' %}nav-active{% endif %}">📋 Orders</a>
+            <a href="/history"   class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'history' %}nav-active{% endif %}">📈 Performance</a>
+            <a href="/runs"      class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'runs' %}nav-active{% endif %}">🕒 Run History</a>
+          </nav>
+        </aside>
+      </div>
+
+      <!-- ─── Page Content ─── -->
+      <main class="flex-1 overflow-y-auto p-4 sm:p-6">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <script>
+    function toggleSidebar() {
+      const overlay = document.getElementById('sidebar-overlay');
+      overlay.classList.toggle('hidden');
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
