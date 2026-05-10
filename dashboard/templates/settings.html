@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Settings — Trading Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-2xl">
+
+  <!-- Page heading -->
+  <div>
+    <h1 class="text-2xl font-bold text-wm-text">Settings</h1>
+    <p class="text-sm text-gray-500 mt-0.5">Manage your paper trading environment</p>
+  </div>
+
+  <!-- Current state card -->
+  <div class="bg-white border border-wm-border rounded-lg p-5 space-y-3">
+    <h2 class="text-base font-semibold text-wm-text">Current State</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+      <div>
+        <div class="text-xs text-gray-500 uppercase tracking-wider">Orders</div>
+        <div class="text-lg font-bold text-wm-text">{{ stats.orders }}</div>
+      </div>
+      <div>
+        <div class="text-xs text-gray-500 uppercase tracking-wider">Holdings</div>
+        <div class="text-lg font-bold text-wm-text">{{ stats.holdings }}</div>
+      </div>
+      <div>
+        <div class="text-xs text-gray-500 uppercase tracking-wider">Snapshots</div>
+        <div class="text-lg font-bold text-wm-text">{{ stats.snapshots }}</div>
+      </div>
+      <div>
+        <div class="text-xs text-gray-500 uppercase tracking-wider">Run Logs</div>
+        <div class="text-lg font-bold text-wm-text">{{ stats.run_logs }}</div>
+      </div>
+    </div>
+    <div class="text-sm text-gray-500 pt-1 border-t border-wm-border">
+      Initial capital: <strong class="text-wm-text">{{ header.initial_capital | fmt_inr }}</strong>
+      &nbsp;·&nbsp;
+      Cash: <strong class="text-wm-text">{{ header.cash | fmt_inr }}</strong>
+    </div>
+  </div>
+
+  <!-- Reset section -->
+  <div class="bg-white border-2 border-[#ea1100]/30 rounded-lg p-5 space-y-4">
+    <div class="flex items-start gap-3">
+      <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center shrink-0 mt-0.5">
+        <svg class="w-5 h-5 text-[#ea1100]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+        </svg>
+      </div>
+      <div>
+        <h2 class="text-base font-semibold text-wm-text">Reset Paper Trading</h2>
+        <p class="text-sm text-gray-500 mt-1">
+          This will <strong>permanently delete</strong> all orders, holdings, daily snapshots,
+          and run logs. Your portfolio will be reset to fresh starting capital.
+          This action cannot be undone.
+        </p>
+      </div>
+    </div>
+
+    <form id="reset-form" class="space-y-4 pl-[52px]">
+      <div>
+        <label for="capital" class="block text-sm font-medium text-wm-text mb-1">
+          Starting Capital (₹)
+        </label>
+        <input type="number" id="capital" name="capital"
+               value="{{ header.initial_capital | int }}"
+               min="10000" step="10000"
+               class="w-full sm:w-64 px-3 py-2 border border-wm-border rounded-md text-sm
+                      focus:outline-none focus:ring-2 focus:ring-[#0053e2] focus:border-transparent"
+               aria-describedby="capital-help">
+        <p id="capital-help" class="text-xs text-gray-400 mt-1">
+          Minimum ₹10,000. This becomes your starting cash balance.
+        </p>
+      </div>
+
+      <!-- Confirmation input -->
+      <div>
+        <label for="confirm" class="block text-sm font-medium text-wm-text mb-1">
+          Type <code class="bg-wm-subtle px-1.5 py-0.5 rounded text-xs font-mono text-[#ea1100]">RESET</code> to confirm
+        </label>
+        <input type="text" id="confirm" name="confirm"
+               placeholder="Type RESET here"
+               autocomplete="off"
+               class="w-full sm:w-64 px-3 py-2 border border-wm-border rounded-md text-sm
+                      focus:outline-none focus:ring-2 focus:ring-[#ea1100] focus:border-transparent">
+      </div>
+
+      <button type="button" id="reset-btn" disabled
+              class="px-5 py-2.5 rounded-md text-sm font-semibold text-white
+                     bg-[#ea1100] hover:bg-[#c00e00] disabled:bg-gray-300 disabled:cursor-not-allowed
+                     transition focus:outline-none focus:ring-2 focus:ring-[#ea1100] focus:ring-offset-2">
+        🗑️ Reset Everything
+      </button>
+    </form>
+
+    <!-- Success/error message area -->
+    <div id="reset-result" class="pl-[52px] hidden"></div>
+  </div>
+
+  <!-- Seed demo data section -->
+  <div class="bg-white border border-wm-border rounded-lg p-5 space-y-3">
+    <h2 class="text-base font-semibold text-wm-text">Load Demo Data</h2>
+    <p class="text-sm text-gray-500">
+      Populate the database with 30 days of realistic demo data for testing the dashboard.
+      Useful after a reset to see how things look with data.
+    </p>
+    <button type="button" id="seed-btn"
+            class="px-4 py-2 rounded-md text-sm font-medium border border-wm-border
+                   text-wm-text hover:bg-wm-subtle transition">
+      🌱 Seed Demo Data
+    </button>
+    <div id="seed-result" class="hidden"></div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Enable reset button only when user types RESET
+  const confirmInput = document.getElementById('confirm');
+  const resetBtn = document.getElementById('reset-btn');
+
+  confirmInput.addEventListener('input', () => {
+    resetBtn.disabled = confirmInput.value.trim() !== 'RESET';
+  });
+
+  // Reset action
+  resetBtn.addEventListener('click', async () => {
+    const capital = document.getElementById('capital').value;
+    resetBtn.disabled = true;
+    resetBtn.textContent = 'Resetting…';
+
+    try {
+      const resp = await fetch('/api/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initial_capital: parseFloat(capital) }),
+      });
+      const data = await resp.json();
+      const resultEl = document.getElementById('reset-result');
+      resultEl.classList.remove('hidden');
+
+      if (data.success) {
+        resultEl.innerHTML = `
+          <div class="flex items-center gap-2 text-sm text-[#2a8703] font-medium mt-2">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+            </svg>
+            ${data.message} — <a href="/" class="underline">back to dashboard</a>
+          </div>`;
+        confirmInput.value = '';
+      } else {
+        resultEl.innerHTML = `
+          <div class="text-sm text-[#ea1100] font-medium mt-2">
+            ❌ ${data.message}
+          </div>`;
+      }
+    } catch (err) {
+      document.getElementById('reset-result').innerHTML = `
+        <div class="text-sm text-[#ea1100] font-medium mt-2">
+          ❌ Network error: ${err.message}
+        </div>`;
+    }
+    resetBtn.disabled = false;
+    resetBtn.textContent = '🗑️ Reset Everything';
+  });
+
+  // Seed demo data action
+  document.getElementById('seed-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('seed-btn');
+    btn.disabled = true;
+    btn.textContent = 'Seeding…';
+
+    try {
+      const resp = await fetch('/api/seed', { method: 'POST' });
+      const data = await resp.json();
+      const resultEl = document.getElementById('seed-result');
+      resultEl.classList.remove('hidden');
+      if (data.success) {
+        resultEl.innerHTML = `
+          <div class="text-sm text-[#2a8703] font-medium mt-2">
+            ✅ ${data.message} — <a href="/" class="underline">view dashboard</a>
+          </div>`;
+      } else {
+        resultEl.innerHTML = `
+          <div class="text-sm text-[#ea1100] font-medium mt-2">❌ ${data.message}</div>`;
+      }
+    } catch (err) {
+      document.getElementById('seed-result').innerHTML = `
+        <div class="text-sm text-[#ea1100] font-medium mt-2">❌ ${err.message}</div>`;
+    }
+    btn.disabled = false;
+    btn.textContent = '🌱 Seed Demo Data';
+  });
+</script>
+{% endblock %}

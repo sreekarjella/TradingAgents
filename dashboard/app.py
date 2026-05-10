@@ -14,9 +14,10 @@ from pathlib import Path
 from typing import Any, Generator
 
 from fastapi import FastAPI, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
+from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
 # Path setup — DBs live at ../data/ relative to this file
@@ -402,6 +403,66 @@ async def page_runs(
         "page_num": page_num,
         "total_pages": total_pages,
     })
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def page_settings(request: Request) -> HTMLResponse:
+    """Settings page with DB reset controls."""
+    stats = {
+        "orders": (query_one(PORTFOLIO_DB, "SELECT COUNT(*) as n FROM orders") or {}).get("n", 0),
+        "holdings": (query_one(PORTFOLIO_DB, "SELECT COUNT(*) as n FROM holdings WHERE quantity > 0") or {}).get("n", 0),
+        "snapshots": (query_one(PORTFOLIO_DB, "SELECT COUNT(*) as n FROM daily_snapshots") or {}).get("n", 0),
+        "run_logs": (query_one(RUN_TRACKER_DB, "SELECT COUNT(*) as n FROM run_log") or {}).get("n", 0),
+    }
+    return templates.TemplateResponse(request, "settings.html", {
+        "page": "settings",
+        "header": _header_context(),
+        "stats": stats,
+    })
+
+
+class ResetRequest(BaseModel):
+    initial_capital: float = 1_000_000.0
+
+
+@app.post("/api/reset")
+async def api_reset(body: ResetRequest) -> JSONResponse:
+    """Wipe all trading data and reset to fresh state."""
+    capital = max(body.initial_capital, 10_000)  # Floor at ₹10K
+
+    try:
+        # Reset portfolio DB
+        with get_db(PORTFOLIO_DB) as conn:
+            conn.execute("DELETE FROM orders")
+            conn.execute("DELETE FROM holdings")
+            conn.execute("DELETE FROM daily_snapshots")
+            conn.execute("INSERT OR REPLACE INTO config (key, value) VALUES ('cash', ?)", (str(capital),))
+            conn.execute("INSERT OR REPLACE INTO config (key, value) VALUES ('initial_capital', ?)", (str(capital),))
+            conn.commit()
+
+        # Reset run tracker DB
+        if RUN_TRACKER_DB.exists():
+            with get_db(RUN_TRACKER_DB) as conn:
+                conn.execute("DELETE FROM run_log")
+                conn.commit()
+
+        return JSONResponse({
+            "success": True,
+            "message": f"All data cleared. Starting fresh with ₹{capital:,.0f}",
+        })
+    except Exception as e:
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+
+@app.post("/api/seed")
+async def api_seed() -> JSONResponse:
+    """Seed demo data for dashboard testing."""
+    try:
+        from dashboard.seed_demo_data import seed_all
+        result = seed_all()
+        return JSONResponse({"success": True, "message": result})
+    except Exception as e:
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
 # ---------------------------------------------------------------------------

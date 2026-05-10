@@ -355,6 +355,13 @@ def seed_run_tracker_db(reset: bool = False) -> None:
           f"{len({e['date'] for e in entries})} days")
 
 
+def seed_all(reset: bool = True) -> str:
+    """Seed both DBs. Returns summary message. Called by API endpoint."""
+    seed_portfolio_db(reset=reset)
+    seed_run_tracker_db(reset=reset)
+    return "Demo data loaded: orders, holdings, snapshots, and run logs seeded."
+
+
 def main() -> None:
     """Entrypoint."""
     reset = "--reset" in sys.argv
