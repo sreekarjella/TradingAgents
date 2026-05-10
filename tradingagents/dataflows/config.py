@@ -27,5 +27,10 @@ def get_config() -> Dict:
     return _config.copy()
 
 
+def is_india_market() -> bool:
+    """Check if the current config targets Indian markets (NSE)."""
+    return "NSE" in get_config().get("market_context", "")
+
+
 # Initialize with default config
 initialize_config()

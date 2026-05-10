@@ -5,12 +5,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_language_instruction,
     get_news,
 )
-from tradingagents.dataflows.config import get_config
-
-
-def _is_india_market() -> bool:
-    """Check if the current config targets Indian markets."""
-    return bool(get_config().get("market_context", "")) and "NSE" in get_config().get("market_context", "")
+from tradingagents.dataflows.config import is_india_market as _is_india_market
 
 
 def create_news_analyst(llm):
@@ -36,6 +31,16 @@ def create_news_analyst(llm):
             + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
             + get_language_instruction()
         )
+
+        # When India tools are available, add explicit instructions
+        if _is_india_market():
+            system_message += (
+                "\n\nIMPORTANT — India Market Tools: You MUST also call get_india_vix "
+                "and get_fii_dii using the current date to get India VIX volatility "
+                "data and FII/DII institutional flow data. Include their findings "
+                "in your report under dedicated sections. Do NOT skip these tools "
+                "or write 'Pending tool call' — actually invoke them."
+            )
 
         prompt = ChatPromptTemplate.from_messages(
             [

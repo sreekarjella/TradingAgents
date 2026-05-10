@@ -24,7 +24,7 @@ from tradingagents.agents.utils.agent_states import (
     InvestDebateState,
     RiskDebateState,
 )
-from tradingagents.dataflows.config import set_config
+from tradingagents.dataflows.config import set_config, is_india_market
 
 # Import the new abstract tool methods from agent_utils
 from tradingagents.agents.utils.agent_utils import (
@@ -43,6 +43,7 @@ from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, t
 from .conditional_logic import ConditionalLogic
 from .setup import GraphSetup
 from .propagation import Propagator
+
 from .reflection import Reflector
 from .signal_processing import SignalProcessor
 
@@ -153,38 +154,30 @@ class TradingAgentsGraph:
         return kwargs
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
-        """Create tool nodes for different data sources using abstract methods."""
+        """Create tool nodes for different data sources using abstract methods.
+
+        When the config targets Indian markets (NSE), India-specific tools
+        (get_india_vix, get_fii_dii) are registered in the market and news
+        ToolNodes so the LLM's tool calls can actually be executed.
+        """
+        market_tools = [get_stock_data, get_indicators]
+        news_tools = [get_news, get_global_news, get_insider_transactions]
+
+        if is_india_market():
+            from tradingagents.agents.utils.india_market_tools import (
+                get_fii_dii,
+                get_india_vix,
+            )
+            market_tools.extend([get_india_vix, get_fii_dii])
+            news_tools.extend([get_india_vix, get_fii_dii])
+
         return {
-            "market": ToolNode(
-                [
-                    # Core stock data tools
-                    get_stock_data,
-                    # Technical indicators
-                    get_indicators,
-                ]
-            ),
-            "social": ToolNode(
-                [
-                    # News tools for social media analysis
-                    get_news,
-                ]
-            ),
-            "news": ToolNode(
-                [
-                    # News and insider information
-                    get_news,
-                    get_global_news,
-                    get_insider_transactions,
-                ]
-            ),
+            "market": ToolNode(market_tools),
+            "social": ToolNode([get_news]),
+            "news": ToolNode(news_tools),
             "fundamentals": ToolNode(
-                [
-                    # Fundamental analysis tools
-                    get_fundamentals,
-                    get_balance_sheet,
-                    get_cashflow,
-                    get_income_statement,
-                ]
+                [get_fundamentals, get_balance_sheet,
+                 get_cashflow, get_income_statement]
             ),
         }
 
