@@ -64,6 +64,8 @@ def run_single(
     graph,
     trade_date: str,
     dry_run: bool = False,
+    sizing: dict | None = None,
+    guardrails: dict | None = None,
 ) -> RunResult:
     """Run pipeline + executor for a single ticker.
 
@@ -73,6 +75,8 @@ def run_single(
         graph: TradingAgentsGraph instance.
         trade_date: Date string (YYYY-MM-DD).
         dry_run: If True, resolve trades but don't execute.
+        sizing: Position sizing overrides from config.toml.
+        guardrails: Trade guardrails from config.toml.
 
     Returns:
         RunResult with rating, action, and order details.
@@ -90,7 +94,10 @@ def run_single(
         logger.info("%s → Rating: %s", ticker, rating)
 
         # Resolve to concrete trade
-        trade = resolve_trade(ticker, rating, decision_text, broker)
+        trade = resolve_trade(
+            ticker, rating, decision_text, broker,
+            sizing_overrides=sizing, guardrails=guardrails,
+        )
 
         # Execute (or dry run)
         order = execute_trade(trade, broker, dry_run=dry_run)
@@ -136,6 +143,12 @@ def run_daily(
     max_positions: int = MAX_POSITIONS,
     num_candidates: int = DEFAULT_CANDIDATES,
     use_screener: bool = True,
+    sizing: dict | None = None,
+    guardrails: dict | None = None,
+    screener_weights: dict | None = None,
+    bullish_keywords: list[str] | None = None,
+    bearish_keywords: list[str] | None = None,
+    buy_bias: bool = True,
 ) -> DailyReport:
     """Run the full daily trading cycle with intelligent pre-screening.
 
@@ -183,7 +196,10 @@ def run_daily(
         if held_tickers:
             logger.info("\n📋 Reviewing %d existing positions...", len(held_tickers))
             for ticker in held_tickers:
-                result = run_single(ticker, broker, graph, trade_date, dry_run)
+                result = run_single(
+                    ticker, broker, graph, trade_date, dry_run,
+                    sizing=sizing, guardrails=guardrails,
+                )
                 report.results.append(result)
 
     # Re-check position count (sells during review may have freed slots)
@@ -207,7 +223,10 @@ def run_daily(
                 top_n=effective_candidates,
                 trade_date=trade_date,
                 exclude=held_tickers,
-                buy_bias=True,
+                buy_bias=buy_bias,
+                weights=screener_weights,
+                bullish_keywords=bullish_keywords,
+                bearish_keywords=bearish_keywords,
             )
             report.screen_results = screen_results
             candidates = [r.ticker for r in screen_results]
@@ -217,7 +236,10 @@ def run_daily(
         # ── Step 3: Run pipeline on candidates ───────────────────────
         logger.info("\n🎯 Analyzing %d candidates: %s", len(candidates), ", ".join(candidates))
         for ticker in candidates:
-            result = run_single(ticker, broker, graph, trade_date, dry_run)
+            result = run_single(
+                ticker, broker, graph, trade_date, dry_run,
+                sizing=sizing, guardrails=guardrails,
+            )
             report.results.append(result)
 
             # Re-check slots after each trade (a Buy consumes a slot)
@@ -297,47 +319,47 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
+    # Load unified config from config.toml
+    from tradingagents.config_loader import load_config
+
+    config_path = "config.toml"
+    for arg in sys.argv[1:]:
+        if arg.startswith("--config="):
+            config_path = arg.split("=", 1)[1]
+
+    cfg = load_config(config_path)
+
     # Import here to avoid circular deps at module level
     from tradingagents.graph.trading_graph import TradingAgentsGraph
-
-    # Load config
-    try:
-        from tradingagents.config_india import INDIA_CONFIG as config
-    except ImportError:
-        from tradingagents.default_config import DEFAULT_CONFIG as config
-
     from . import create_broker
 
-    # Defaults
+    # CLI flag overrides (take precedence over config.toml)
     dry_run = "--dry-run" in sys.argv
-    use_screener = "--no-screen" not in sys.argv
-    mode = "paper"
-    num_candidates = DEFAULT_CANDIDATES
-    max_positions = MAX_POSITIONS
+    use_screener = cfg.screener_enabled and "--no-screen" not in sys.argv
+    num_candidates = cfg.screener_candidates
+    max_positions = cfg.max_positions
+    custom_tickers = None
 
-    # Parse CLI args
     for arg in sys.argv[1:]:
         if arg.startswith("--tickers="):
-            # Explicit tickers → skip screener
             use_screener = False
-            custom_tickers = arg.split("=")[1].split(",")
-        elif arg.startswith("--mode="):
-            mode = arg.split("=")[1]
+            custom_tickers = arg.split("=", 1)[1].split(",")
         elif arg.startswith("--candidates="):
             num_candidates = int(arg.split("=")[1])
         elif arg.startswith("--max-positions="):
             max_positions = int(arg.split("=")[1])
 
-    broker = create_broker({"trading_mode": mode})
-    graph = TradingAgentsGraph(config=config)
+    broker = create_broker(cfg.broker_config)
+    graph = TradingAgentsGraph(config=cfg.pipeline_config)
 
-    # Determine universe
-    universe = custom_tickers if not use_screener and "custom_tickers" in dir() else NIFTY_50
+    universe = custom_tickers if custom_tickers else cfg.universe
 
-    print(f"\n🐶 Starting daily run — {mode} mode")
+    print(f"\n🐶 Starting daily run — {cfg.trading_mode} mode")
+    print(f"   Config: {cfg.source_path}")
+    print(f"   LLM: {cfg.llm_provider} ({cfg.quick_think_model} / {cfg.deep_think_model})")
     print(f"   Screener: {'ON (scanning all {})'.format(len(universe)) if use_screener else 'OFF'}")
     print(f"   Max positions: {max_positions} | New candidates: {num_candidates}")
-    print(f"   {'DRY RUN' if dry_run else 'LIVE EXECUTION'}")
+    print(f"   Capital: ₹{cfg.initial_capital:,.0f} | Mode: {'DRY RUN' if dry_run else 'LIVE EXECUTION'}")
     print()
 
     report = run_daily(
@@ -347,6 +369,12 @@ if __name__ == "__main__":
         use_screener=use_screener,
         num_candidates=num_candidates,
         max_positions=max_positions,
+        sizing=cfg.sizing,
+        guardrails=cfg.guardrails,
+        screener_weights=cfg.screener_weights,
+        bullish_keywords=cfg.bullish_keywords,
+        bearish_keywords=cfg.bearish_keywords,
+        buy_bias=cfg.screener_buy_bias,
     )
 
     print("\n" + report.portfolio_summary)

@@ -1,0 +1,193 @@
+# ─────────────────────────────────────────────────────────────────────────
+# TradingAgents Configuration
+# ─────────────────────────────────────────────────────────────────────────
+#
+# Edit this file to tune every aspect of the trading system.
+# All values below are defaults — only change what you need.
+#
+# Tip: Delete any section or key you don't want to override.
+#      The system uses sensible defaults for anything missing.
+#
+# After editing, run:
+#   python -m tradingagents.trading.daily_runner
+#
+# Or verify your config:
+#   python -m tradingagents.config_loader
+# ─────────────────────────────────────────────────────────────────────────
+
+
+# ── LLM (Language Model) ────────────────────────────────────────────────
+# The AI "brain" that powers the analysts, debate, and portfolio manager.
+
+[llm]
+provider = "ollama"                # Options: ollama, openai, anthropic, google, xai, deepseek, qwen, openrouter, azure
+deep_think_model = "qwen3:32b"     # Used for: Research debate, Portfolio Manager decision (slower, smarter)
+quick_think_model = "qwen3:14b"    # Used for: Analysts, tool calls, risk discussion (faster, lighter)
+backend_url = ""                   # Leave empty for auto-detect. Override for custom endpoint (e.g. "http://localhost:11434/v1")
+
+# Provider-specific tuning (leave empty to use provider defaults)
+google_thinking_level = ""         # Options: high, minimal
+openai_reasoning_effort = ""       # Options: high, medium, low
+anthropic_effort = ""              # Options: high, medium, low
+
+
+# ── Market ──────────────────────────────────────────────────────────────
+# Defines which market you're trading and how agents understand it.
+
+[market]
+benchmark_ticker = "^NSEI"         # Index to measure performance against. US: "SPY", India: "^NSEI"
+benchmark_name = "NIFTY 50"        # Human-readable name shown in reports
+
+# Extra context injected into every AI agent's prompt.
+# Helps the AI understand India-specific market dynamics.
+context = """
+This is an Indian stock listed on NSE or BSE.
+Key factors: RBI monetary policy; FII/DII flows; INR/USD exchange rate;
+SEBI regulations; India VIX; T+1 settlement; Circuit limits (5%/10%/20%);
+Monsoon impact on agri/FMCG; Union Budget; GST changes;
+Geopolitics (India-China, India-Pakistan, BRICS).
+Currency: INR. Market hours: 9:15 AM - 3:30 PM IST.
+"""
+
+# News search queries for global macro context
+news_queries = [
+    "India stock market NSE BSE economy",
+    "RBI monetary policy interest rate India",
+    "FII DII investment flows India market",
+    "India inflation GDP economic outlook",
+    "India geopolitics trade policy",
+]
+
+
+# ── Data Sources ────────────────────────────────────────────────────────
+# Where to fetch market data. Comma-separated = fallback chain.
+
+[data_vendors]
+core_stock_apis = "yfinance"           # Options: yfinance, alpha_vantage
+technical_indicators = "yfinance"      # Options: yfinance, alpha_vantage
+fundamental_data = "yfinance"          # Options: yfinance, alpha_vantage
+news_data = "india_rss,yfinance"       # Comma-separated fallback: tries india_rss first, then yfinance
+
+# Per-tool overrides (uncomment to override a specific tool's vendor)
+# [data_vendors.tool_overrides]
+# get_stock_data = "alpha_vantage"
+
+
+# ── Stock Universe ──────────────────────────────────────────────────────
+# The full list of stocks the screener scans each morning.
+# Default: NIFTY 50 (all 50 constituents).
+
+[universe]
+tickers = [
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
+    "HINDUNILVR.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "KOTAKBANK.NS",
+    "LT.NS", "AXISBANK.NS", "BAJFINANCE.NS", "MARUTI.NS", "TITAN.NS",
+    "SUNPHARMA.NS", "TATAMOTORS.NS", "ONGC.NS", "NTPC.NS", "POWERGRID.NS",
+    "HCLTECH.NS", "WIPRO.NS", "ADANIENT.NS", "ADANIPORTS.NS", "ULTRACEMCO.NS",
+    "TECHM.NS", "ASIANPAINT.NS", "NESTLEIND.NS", "JSWSTEEL.NS", "TATASTEEL.NS",
+    "BAJAJFINSV.NS", "BAJAJ-AUTO.NS", "DRREDDY.NS", "CIPLA.NS", "COALINDIA.NS",
+    "EICHERMOT.NS", "GRASIM.NS", "DIVISLAB.NS", "APOLLOHOSP.NS", "HEROMOTOCO.NS",
+    "BPCL.NS", "TATACONSUM.NS", "BRITANNIA.NS", "HINDALCO.NS", "INDUSINDBK.NS",
+    "SBILIFE.NS", "HDFCLIFE.NS", "M&M.NS", "SHRIRAMFIN.NS", "TRENT.NS",
+]
+
+
+# ── Pre-Screener ────────────────────────────────────────────────────────
+# Fast heuristic scanner that picks the best candidates for deep analysis.
+# Runs in ~20 seconds with zero LLM calls.
+
+[screener]
+enabled = true         # Set to false to skip screening and use the first N tickers from the universe
+buy_bias = true        # true = favor stocks worth buying (default). false = rank by raw "interestingness"
+candidates = 5         # How many top stocks to send to the full pipeline
+
+# Scoring weights — how much each signal matters (total = 100)
+# Increase a weight to make that signal more important.
+[screener.weights]
+volume = 25            # Volume spike (today vs 20-day average)
+momentum_5d = 20       # 5-day price momentum
+momentum_1d = 15       # 1-day price momentum
+news = 25              # News mentions × sentiment
+extreme = 15           # Proximity to 3-month high/low
+
+# Sentiment keywords — used to judge news headlines as bullish or bearish.
+# Add company-specific or sector-specific terms as needed.
+[screener.sentiment]
+bullish_keywords = [
+    "profit", "growth", "record", "upgrade", "breakout", "rally", "surge",
+    "boom", "expansion", "beat", "outperform", "strong", "bullish", "gain",
+    "rise", "high", "dividend", "buyback", "acquisition", "partnership",
+    "contract", "approval", "launch", "robust", "positive", "recovery",
+    "rebound", "top pick", "overweight", "buy", "target raised",
+    "order win", "deal", "margin improvement", "beat estimates",
+]
+
+bearish_keywords = [
+    "loss", "fraud", "scam", "downgrade", "crash", "plunge", "slump",
+    "decline", "weak", "bearish", "probe", "investigation", "penalty",
+    "fine", "default", "debt", "crisis", "layoff", "restructuring",
+    "warning", "miss", "underperform", "sell-off", "cut",
+    "recall", "ban", "negative", "concern", "risk", "fell", "drop",
+    "target cut", "underweight", "sell", "disappointing", "below estimate",
+]
+
+
+# ── Portfolio ───────────────────────────────────────────────────────────
+# How the portfolio is managed.
+
+[portfolio]
+max_positions = 10             # Maximum number of stocks held at once
+initial_capital = 1000000.0    # Starting virtual money in INR (₹10,00,000 = ₹10 Lakh)
+
+
+# ── Trading ─────────────────────────────────────────────────────────────
+# Controls how trades are executed.
+
+[trading]
+mode = "paper"                             # "paper" = virtual money (SQLite). "live" = real money (Angel One).
+paper_db_path = "data/paper_portfolio.db"  # Where paper trading data is stored
+
+# Position sizing — what % of portfolio to allocate per rating
+[trading.sizing]
+buy = 0.05              # Buy = 5% of portfolio
+overweight = 0.03       # Overweight = 3% of portfolio
+underweight = 0.50      # Underweight = sell 50% of position
+sell = 1.00             # Sell = sell 100% of position
+
+# Safety guardrails — hard limits to prevent catastrophic trades
+[trading.guardrails]
+max_position_pct = 0.10    # Max 10% of portfolio in any single stock
+min_trade_value = 500.0    # Ignore trades smaller than ₹500
+max_trade_value = 100000.0 # Cap any single trade at ₹1,00,000
+
+
+# ── Pipeline ────────────────────────────────────────────────────────────
+# Controls the multi-agent analysis pipeline.
+
+[pipeline]
+max_debate_rounds = 1          # Bull vs Bear debate rounds (more = slower but more thorough)
+max_risk_discuss_rounds = 1    # Risk team discussion rounds
+max_recur_limit = 100          # LangGraph recursion safety limit
+checkpoint_enabled = false     # Save state after each step for crash recovery
+output_language = "English"    # Language for reports (internal debate stays English)
+
+
+# ── Paths ───────────────────────────────────────────────────────────────
+# Where logs, cache, and memory are stored.
+
+[paths]
+results_dir = ""           # Leave empty for default (~/.tradingagents/logs)
+data_cache_dir = ""        # Leave empty for default (~/.tradingagents/cache)
+memory_log_path = ""       # Leave empty for default (~/.tradingagents/memory/trading_memory.md)
+memory_log_max_entries = 0 # 0 = unlimited. Set a number to auto-prune old entries.
+
+
+# ── Angel One (Live Trading Only) ──────────────────────────────────────
+# Only needed if trading.mode = "live".
+# Prefer using .env file for secrets, but you can set them here too.
+
+# [angel_one]
+# api_key = ""
+# client_id = ""
+# password = ""
+# totp_secret = ""

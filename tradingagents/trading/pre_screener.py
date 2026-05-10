@@ -51,8 +51,8 @@ NIFTY_50 = [
 ]
 
 
-# ── Scoring weights ─────────────────────────────────────────────────────
-_WEIGHTS = {
+# ── Scoring weights (defaults — override via config.toml [screener.weights]) ──
+_DEFAULT_WEIGHTS = {
     "volume": 25,
     "momentum_5d": 20,
     "momentum_1d": 15,
@@ -61,8 +61,8 @@ _WEIGHTS = {
 }
 
 
-# ── Headline sentiment keywords ─────────────────────────────────────────
-_BULLISH_KEYWORDS = frozenset({
+# ── Headline sentiment keywords (extend via config.toml) ────────────────
+_DEFAULT_BULLISH_KEYWORDS = frozenset({
     "profit", "growth", "record", "upgrade", "breakout", "rally", "surge",
     "boom", "expansion", "beat", "outperform", "strong", "bullish", "gain",
     "rise", "high", "dividend", "buyback", "acquisition", "partnership",
@@ -71,7 +71,7 @@ _BULLISH_KEYWORDS = frozenset({
     "order win", "deal", "margin improvement", "beat estimates",
 })
 
-_BEARISH_KEYWORDS = frozenset({
+_DEFAULT_BEARISH_KEYWORDS = frozenset({
     "loss", "fraud", "scam", "downgrade", "crash", "plunge", "slump",
     "decline", "weak", "bearish", "probe", "investigation", "penalty",
     "fine", "default", "debt", "crisis", "layoff", "restructuring",
@@ -107,6 +107,9 @@ def pre_screen(
     exclude: set[str] | None = None,
     news_enabled: bool = True,
     buy_bias: bool = True,
+    weights: dict[str, int] | None = None,
+    bullish_keywords: list[str] | None = None,
+    bearish_keywords: list[str] | None = None,
 ) -> list[ScreenResult]:
     """Score and rank stocks — no LLM, pure heuristics.
 
@@ -118,10 +121,17 @@ def pre_screen(
         news_enabled: If False, skip RSS fetch (faster, less accurate).
         buy_bias: If True, favor positive momentum and bullish sentiment.
             If False, score by raw "interestingness" (direction-agnostic).
+        weights: Override scoring weights from config.toml.
+        bullish_keywords: Override bullish sentiment keywords.
+        bearish_keywords: Override bearish sentiment keywords.
 
     Returns:
         Top *top_n* :class:`ScreenResult` objects, highest score first.
     """
+    active_weights = weights or _DEFAULT_WEIGHTS
+    active_bullish = frozenset(bullish_keywords) if bullish_keywords else _DEFAULT_BULLISH_KEYWORDS
+    active_bearish = frozenset(bearish_keywords) if bearish_keywords else _DEFAULT_BEARISH_KEYWORDS
+
     universe = universe or NIFTY_50
     exclude = exclude or set()
     trade_date = trade_date or datetime.now().strftime("%Y-%m-%d")
@@ -140,13 +150,15 @@ def pre_screen(
     # ── Step 2: Fetch news with sentiment (lightweight RSS scan) ─────
     news_signals: dict[str, _NewsSignal] = {}
     if news_enabled:
-        news_signals = _fetch_news_signals(tickers_to_scan, trade_date)
+        news_signals = _fetch_news_signals(
+            tickers_to_scan, trade_date, active_bullish, active_bearish,
+        )
 
     # ── Step 3: Score each ticker ────────────────────────────────────
     results: list[ScreenResult] = []
     for ticker in tickers_to_scan:
         signal = news_signals.get(ticker, _NewsSignal())
-        result = _score_ticker(ticker, price_data.get(ticker), signal, buy_bias)
+        result = _score_ticker(ticker, price_data.get(ticker), signal, buy_bias, active_weights)
         results.append(result)
 
     # ── Step 4: Rank and return top N ────────────────────────────────
@@ -210,20 +222,26 @@ def _fetch_price_data(tickers: list[str]) -> dict[str, dict]:
 
 # ── News signals (mentions + sentiment, no LLM) ─────────────────────────
 
-def _headline_sentiment(text: str) -> tuple[int, int]:
+def _headline_sentiment(
+    text: str,
+    bullish: frozenset[str],
+    bearish: frozenset[str],
+) -> tuple[int, int]:
     """Count bullish and bearish keyword hits in a headline/summary.
 
     Returns (positive_hits, negative_hits).
     """
     lower = text.lower()
-    pos = sum(1 for kw in _BULLISH_KEYWORDS if kw in lower)
-    neg = sum(1 for kw in _BEARISH_KEYWORDS if kw in lower)
+    pos = sum(1 for kw in bullish if kw in lower)
+    neg = sum(1 for kw in bearish if kw in lower)
     return pos, neg
 
 
 def _fetch_news_signals(
     tickers: list[str],
     trade_date: str,
+    bullish: frozenset[str],
+    bearish: frozenset[str],
 ) -> dict[str, _NewsSignal]:
     """Fetch news mentions + keyword sentiment for each ticker.
 
@@ -259,7 +277,7 @@ def _fetch_news_signals(
             mentions += 1
             # Analyze sentiment on the combined title + summary
             combined = entry.get("title", "") + " " + entry.get("summary", "")
-            pos, neg = _headline_sentiment(combined)
+            pos, neg = _headline_sentiment(combined, bullish, bearish)
             total_pos += pos
             total_neg += neg
 
@@ -284,6 +302,7 @@ def _score_ticker(
     price_data: dict | None,
     news: _NewsSignal,
     buy_bias: bool,
+    weights: dict[str, int],
 ) -> ScreenResult:
     """Compute a composite score for one ticker.
 
@@ -356,11 +375,11 @@ def _score_ticker(
 
         # ── Composite score (weighted sum) ───────────────────────────
         result.total_score = (
-            scores["volume"] * _WEIGHTS["volume"]
-            + scores["momentum_1d"] * _WEIGHTS["momentum_1d"]
-            + scores["momentum_5d"] * _WEIGHTS["momentum_5d"]
-            + scores["news"] * _WEIGHTS["news"]
-            + scores["extreme"] * _WEIGHTS["extreme"]
+            scores["volume"] * weights["volume"]
+            + scores["momentum_1d"] * weights["momentum_1d"]
+            + scores["momentum_5d"] * weights["momentum_5d"]
+            + scores["news"] * weights["news"]
+            + scores["extreme"] * weights["extreme"]
         )
 
     except Exception as e:

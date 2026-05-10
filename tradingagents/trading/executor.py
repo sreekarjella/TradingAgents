@@ -15,8 +15,9 @@ from .broker import BrokerInterface, Order
 
 logger = logging.getLogger(__name__)
 
-# Default position sizing as % of total portfolio value
-_SIZING = {
+# Default position sizing as % of total portfolio value.
+# These are fallbacks — prefer loading from config.toml via TradingConfig.sizing.
+_DEFAULT_SIZING = {
     "Buy": 0.05,         # 5% of portfolio per Buy
     "Overweight": 0.03,  # 3% — gradual increase
     "Underweight": 0.50, # Sell 50% of holding
@@ -24,10 +25,12 @@ _SIZING = {
     "Hold": 0.00,        # No action
 }
 
-# Guardrails
-_MAX_POSITION_PCT = 0.10   # Max 10% of portfolio in a single stock
-_MIN_TRADE_VALUE = 500.0   # Don't bother with trades under ₹500
-_MAX_TRADE_VALUE = 100_000.0  # Max ₹1L per single trade (safety cap)
+# Default guardrails — prefer loading from config.toml via TradingConfig.guardrails.
+_DEFAULT_GUARDRAILS = {
+    "max_position_pct": 0.10,       # Max 10% of portfolio in a single stock
+    "min_trade_value": 500.0,       # Don't bother with trades under ₹500
+    "max_trade_value": 100_000.0,   # Max ₹1L per single trade (safety cap)
+}
 
 
 @dataclass(frozen=True)
@@ -84,6 +87,7 @@ def resolve_trade(
     decision_text: str,
     broker: BrokerInterface,
     sizing_overrides: Optional[dict] = None,
+    guardrails: Optional[dict] = None,
 ) -> TradeAction:
     """Resolve a pipeline decision into a concrete trade action.
 
@@ -93,11 +97,15 @@ def resolve_trade(
         decision_text: Full PM decision markdown (for rationale + details).
         broker: Broker to query for portfolio state and prices.
         sizing_overrides: Optional dict overriding default sizing percentages.
+            Keys: Buy, Overweight, Underweight, Sell (float values).
+        guardrails: Optional dict with max_position_pct, min_trade_value,
+            max_trade_value.  Loaded from config.toml when available.
 
     Returns:
         TradeAction with resolved quantity, price, and side.
     """
-    sizing = {**_SIZING, **(sizing_overrides or {})}
+    sizing = {**_DEFAULT_SIZING, **(sizing_overrides or {})}
+    guards = {**_DEFAULT_GUARDRAILS, **(guardrails or {})}
 
     # Hold = no action
     if rating == "Hold":
@@ -136,7 +144,7 @@ def resolve_trade(
     if rating in ("Buy", "Overweight"):
         return _resolve_buy(
             ticker, rating, ltp, total_value, cash,
-            current_value, sizing, details, decision_text,
+            current_value, sizing, guards, details, decision_text,
         )
 
     if rating in ("Sell", "Underweight"):
@@ -157,31 +165,35 @@ def resolve_trade(
 def _resolve_buy(
     ticker: str, rating: str, ltp: float, total_value: float,
     cash: float, current_value: float, sizing: dict,
-    details: dict, decision_text: str,
+    guards: dict, details: dict, decision_text: str,
 ) -> TradeAction:
     """Resolve a Buy/Overweight into a concrete BUY order."""
+    max_position_pct = guards["max_position_pct"]
+    min_trade_value = guards["min_trade_value"]
+    max_trade_value = guards["max_trade_value"]
+
     # Calculate allocation
     alloc_pct = sizing.get(rating, 0.05)
     target_value = total_value * alloc_pct
 
     # Guardrail: max position size
-    max_allowed = total_value * _MAX_POSITION_PCT
+    max_allowed = total_value * max_position_pct
     remaining_room = max(0, max_allowed - current_value)
 
-    if remaining_room <= _MIN_TRADE_VALUE:
+    if remaining_room <= min_trade_value:
         return TradeAction(
             ticker=ticker, rating=rating, side="BUY", quantity=0,
             estimated_price=ltp, estimated_value=0,
             rationale=f"Already at max position ({current_value / total_value:.0%} of portfolio)",
             skipped=True,
-            skip_reason=f"Position already at {current_value / total_value:.0%} (max {_MAX_POSITION_PCT:.0%})",
+            skip_reason=f"Position already at {current_value / total_value:.0%} (max {max_position_pct:.0%})",
         )
 
     # Cap at remaining room, max trade value, and available cash
-    trade_value = min(target_value, remaining_room, _MAX_TRADE_VALUE, cash)
+    trade_value = min(target_value, remaining_room, max_trade_value, cash)
 
-    if trade_value < _MIN_TRADE_VALUE:
-        reason = "Insufficient cash" if cash < _MIN_TRADE_VALUE else f"Trade too small (₹{trade_value:,.0f})"
+    if trade_value < min_trade_value:
+        reason = "Insufficient cash" if cash < min_trade_value else f"Trade too small (₹{trade_value:,.0f})"
         return TradeAction(
             ticker=ticker, rating=rating, side="BUY", quantity=0,
             estimated_price=ltp, estimated_value=0,
