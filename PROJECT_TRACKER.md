@@ -2,7 +2,7 @@
 
 > **Owner**: Sreekar
 > **Started**: 2026-05-09
-> **Status**: 🟢 Phase 2 — Paper Trading Engine (core built, config centralized)
+> **Status**: 🟢 Phase 2 — Paper Trading Engine (core built, config centralized, dashboard live)
 > **Repo Base**: [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) v0.2.4
 
 ---
@@ -41,6 +41,8 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | Config format | TOML (`config.toml`) | Human-readable, built into Python 3.11+, zero deps | 2026-05-09 |
 | Config architecture | Single file + loader with bridge methods | TOML → `TradingConfig` → `.pipeline_config` / `.broker_config` dicts | 2026-05-09 |
 | Documentation strategy | 3 docs for 3 audiences | HOW_IT_WORKS (non-tech), HOW_TO_USE (dev), PROJECT_TRACKER (owner) | 2026-05-09 |
+| Duplicate detection | SQLite run_log, separate DB | Tracks per-ticker per-day analysis; errors allow retry; separate from broker | 2026-05-09 |
+| Dashboard stack | FastAPI + HTMX + Tailwind + Chart.js | Walmart default stack, Zerodha-inspired design, port 8501 | 2026-05-09 |
 
 ---
 
@@ -107,6 +109,9 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 - [x] Add `--config=path.toml` CLI flag to daily runner ✅
 - [x] Add config verifier: `python -m tradingagents.config_loader` ✅
 - [x] Write HOW_IT_WORKS.md — plain-English guide for non-technical readers ✅
+- [x] Add duplicate run detection — block re-analysis of same stock same day ✅
+- [x] Build trading dashboard — Zerodha-inspired, 5 pages, Chart.js charts ✅
+- [x] Seed demo data script for dashboard (30 days, 14 orders, 6 holdings) ✅
 - [ ] Build daily scheduler (run at 3:30 PM IST market close)
 
 ### Phase 3: Paper Trading Month (Target: Week 4-7)
@@ -173,6 +178,9 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | 2026-05-09 | — | Buy-bias filter | ✅ validated | Falling knives (SBI -6.7%, BRIT -5.1%) excluded from buy candidates |
 | 2026-05-09 | — | Config loader | ✅ all imports | config.toml loaded, all 17 pipeline_config keys, 7 broker_config keys, weights/sizing/guardrails bridged |
 | 2026-05-09 | — | Config verifier | ✅ passes | `python -m tradingagents.config_loader` — all sections valid, weights sum to 100 |
+| 2026-05-09 | — | Duplicate detector | ✅ 7/7 tests | not-analyzed, duplicate-blocked, different-ticker, error-retry, stats, today-runs, clear |
+| 2026-05-09 | — | Dashboard routes | ✅ 6/6 200s | /, /today, /portfolio, /orders, /history, /runs — all render with demo data |
+| 2026-05-09 | — | Dashboard data | ✅ rendering | Portfolio ₹992K, 6 holdings, 14 orders, 20 snapshots, Chart.js charts |
 
 ---
 
@@ -206,6 +214,8 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 | 2026-05-09 | Config loader with bridge methods | `TradingConfig.pipeline_config` and `.broker_config` produce existing dict shapes — zero breaking changes |
 | 2026-05-09 | Pass config through function params, not globals | Functions like `resolve_trade()` accept `guardrails=` kwarg — explicit, testable, no hidden state |
 | 2026-05-09 | Three-doc strategy | Technical/non-technical/tracker — each audience gets what they need without wading through noise |
+| 2026-05-09 | Separate run_tracker DB from paper broker | Works with both paper and live trading; errors allow retry, only successes block dupes |
+| 2026-05-09 | Dashboard on port 8501 | 8080 is Teams, 8000 is common FastAPI default — 8501 avoids conflicts |
 
 ---
 
@@ -271,7 +281,21 @@ Build an LLM-powered autonomous trading system for **Indian stock markets** (NSE
 |---|---|---|---|
 | `HOW_IT_WORKS.md` | New | 375 | Plain-English guide for non-technical readers |
 | `HOW_TO_USE.md` | New | 969 | Developer guide: CLI, Python API, config, troubleshooting |
-| `PROJECT_TRACKER.md` | New | ~250 | This file — architecture decisions, phase tracking, test log |
+| `PROJECT_TRACKER.md` | New | ~350 | This file — architecture decisions, phase tracking, test log |
+
+### Dashboard
+
+| File | Type | Lines | Description |
+|---|---|---|---|
+| `dashboard/__init__.py` | New | 2 | Package marker |
+| `dashboard/app.py` | New | 413 | FastAPI app: 5 routes, DB helpers, Jinja2 filters |
+| `dashboard/seed_demo_data.py` | New | 371 | Populate 30 days realistic demo data |
+| `dashboard/templates/base.html` | New | 205 | Layout: sidebar nav, sticky header, Walmart colors |
+| `dashboard/templates/today.html` | New | 144 | Today's pipeline runs + status bar |
+| `dashboard/templates/portfolio.html` | New | 176 | Holdings table + allocation doughnut chart |
+| `dashboard/templates/orders.html` | New | 145 | Order history with ticker/side/status filters |
+| `dashboard/templates/history.html` | New | 205 | Portfolio vs benchmark charts + cumulative stats |
+| `dashboard/templates/runs.html` | New | 122 | All runs grouped by date, collapsible |
 
 ### Phase 1: India Adaptation
 
@@ -338,4 +362,4 @@ Sentiment = `(positive_hits - negative_hits) / total_hits`, clamped to [-1.0, +1
 | TITAN.NS (+4.7%) | #3 (68.3) | **#1 (+64.2)** | 🟢 Accumulation + breakout + bullish news |
 | ADANIPORTS.NS (+1.6%) | #6 (51.6) | #6 (+34.3) | 🔴 Bearish news sentiment (-0.5) docked points |
 
-*Last updated: 2026-05-09T24:50 IST*
+*Last updated: 2026-05-10T00:50 IST*
