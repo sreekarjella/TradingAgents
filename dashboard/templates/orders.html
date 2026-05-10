@@ -60,6 +60,18 @@
         <option value="REJECTED" {% if filter_status == 'REJECTED' %}selected{% endif %}>REJECTED</option>
       </select>
     </div>
+    <div>
+      <label for="filter-date-from" class="block text-xs font-medium text-gray-500 dark:text-dark-muted mb-1">From</label>
+      <input type="date" id="filter-date-from" name="date_from"
+             value="{{ filter_date_from }}"
+             class="rounded-md border border-wm-border dark:border-dark-border bg-white dark:bg-dark-card dark:text-dark-text px-3 py-2 text-sm focus:ring-2 focus:ring-wm-blue focus:outline-none">
+    </div>
+    <div>
+      <label for="filter-date-to" class="block text-xs font-medium text-gray-500 dark:text-dark-muted mb-1">To</label>
+      <input type="date" id="filter-date-to" name="date_to"
+             value="{{ filter_date_to }}"
+             class="rounded-md border border-wm-border dark:border-dark-border bg-white dark:bg-dark-card dark:text-dark-text px-3 py-2 text-sm focus:ring-2 focus:ring-wm-blue focus:outline-none">
+    </div>
     <button type="submit"
             class="px-4 py-2 rounded-md text-sm font-medium bg-wm-blue text-white hover:bg-wm-blueH transition">
       Apply Filters
@@ -81,7 +93,7 @@
     </div>
     <h2 class="text-lg font-semibold text-wm-text dark:text-dark-text mb-1">No orders found</h2>
     <p class="text-sm text-gray-500 dark:text-dark-muted">
-      {% if filter_ticker != 'ALL' or filter_side != 'ALL' or filter_status != 'ALL' %}
+      {% if filter_ticker != 'ALL' or filter_side != 'ALL' or filter_status != 'ALL' or filter_date_from or filter_date_to %}
         Try adjusting your filters.
       {% else %}
         Orders will appear here once the pipeline executes trades.
@@ -103,6 +115,7 @@
       <table class="w-full text-sm stripe-table" role="table">
         <thead>
           <tr class="bg-wm-subtle dark:bg-dark-raised text-left text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">
+            <th class="px-5 py-3 w-6" scope="col"></th>
             <th class="px-5 py-3" scope="col">Date</th>
             <th class="px-5 py-3" scope="col">Ticker</th>
             <th class="px-5 py-3" scope="col">Side</th>
@@ -111,12 +124,21 @@
             <th class="px-5 py-3 text-right" scope="col">Total</th>
             <th class="px-5 py-3" scope="col">Status</th>
             <th class="px-5 py-3 text-right" scope="col">P&amp;L</th>
-            <th class="px-5 py-3" scope="col">Rationale</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-wm-border dark:divide-dark-border">
           {% for o in orders %}
-          <tr class="hover:bg-blue-50/40 dark:hover:bg-blue-900/20 transition">
+          <!-- Order row -->
+          <tr class="hover:bg-blue-50/40 dark:hover:bg-blue-900/20 transition cursor-pointer order-row"
+              data-order-id="{{ loop.index }}"
+              onclick="toggleRationale({{ loop.index }})">
+            <td class="px-5 py-3 text-gray-400">
+              {% if o.rationale %}
+              <svg class="w-4 h-4 transition-transform order-chevron-{{ loop.index }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+              {% endif %}
+            </td>
             <td class="px-5 py-3 text-gray-500 dark:text-dark-muted text-xs whitespace-nowrap">
               {{ o.created_at[:10] }}
             </td>
@@ -131,10 +153,29 @@
             <td class="px-5 py-3 text-right font-mono font-medium {{ (o.pnl or 0) | pnl_color }}">
               {% if o.pnl %}{{ o.pnl | fmt_inr }}{% else %}—{% endif %}
             </td>
-            <td class="px-5 py-3 text-xs text-gray-500 dark:text-dark-muted max-w-xs truncate" title="{{ o.rationale or '' }}">
-              {{ (o.rationale or '—')[:80] }}{% if (o.rationale or '')|length > 80 %}…{% endif %}
+          </tr>
+          <!-- Expandable rationale drawer -->
+          {% if o.rationale %}
+          <tr id="rationale-{{ loop.index }}" class="hidden">
+            <td colspan="9" class="px-0 py-0">
+              <div class="mx-5 my-3 p-4 rounded-lg bg-wm-subtle dark:bg-dark-raised border border-wm-border dark:border-dark-border">
+                <div class="flex items-start gap-3">
+                  <div class="w-6 h-6 rounded-full bg-wm-blue/10 dark:bg-wm-blue/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <svg class="w-3.5 h-3.5 text-wm-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <h4 class="text-xs font-semibold text-wm-text dark:text-dark-text uppercase tracking-wider mb-2">
+                      AI Rationale — {{ o.ticker.replace('.NS','') }}
+                    </h4>
+                    <p class="text-sm text-gray-600 dark:text-dark-muted leading-relaxed whitespace-pre-wrap">{{ o.rationale }}</p>
+                  </div>
+                </div>
+              </div>
             </td>
           </tr>
+          {% endif %}
           {% endfor %}
         </tbody>
       </table>
@@ -142,4 +183,19 @@
   </div>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleRationale(id) {
+  const row = document.getElementById('rationale-' + id);
+  const chevron = document.querySelector('.order-chevron-' + id);
+  if (!row) return;
+
+  row.classList.toggle('hidden');
+  if (chevron) {
+    chevron.classList.toggle('rotate-90');
+  }
+}
+</script>
 {% endblock %}

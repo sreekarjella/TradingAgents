@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% block title %}Pipeline Runner — Trading Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <!-- Page heading -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-wm-text dark:text-dark-text">Pipeline Runner</h1>
+      <p class="text-sm text-gray-500 dark:text-dark-muted mt-0.5">Run the AI analysis pipeline from the dashboard</p>
+    </div>
+    <div id="status-badge" class="flex items-center gap-2">
+      {% if status.status == 'running' %}
+        <span class="relative flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-wm-blue opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-wm-blue"></span></span>
+        <span class="text-sm font-medium text-wm-blue">Running…</span>
+      {% elif status.status == 'complete' %}
+        <span class="inline-flex h-3 w-3 rounded-full bg-wm-green"></span>
+        <span class="text-sm font-medium text-wm-green">Complete</span>
+      {% elif status.status == 'error' %}
+        <span class="inline-flex h-3 w-3 rounded-full bg-wm-red"></span>
+        <span class="text-sm font-medium text-wm-red">Error</span>
+      {% else %}
+        <span class="inline-flex h-3 w-3 rounded-full bg-gray-300 dark:bg-gray-600"></span>
+        <span class="text-sm font-medium text-gray-500 dark:text-dark-muted">Idle</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+    <!-- Configuration panel (1/3) -->
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-5 space-y-5">
+      <h2 class="text-base font-semibold text-wm-text dark:text-dark-text">Configuration</h2>
+
+      <form id="pipeline-form" class="space-y-4">
+        <!-- Pre-screener toggle -->
+        <div class="flex items-center justify-between">
+          <div>
+            <label for="use-screener" class="text-sm font-medium text-wm-text dark:text-dark-text">Pre-Screener</label>
+            <p class="text-xs text-gray-500 dark:text-dark-muted">Fast scan before deep AI analysis</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="use-screener" checked class="sr-only peer">
+            <div class="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:ring-2 peer-focus:ring-wm-blue rounded-full
+                        peer-checked:after:translate-x-full peer-checked:after:border-white after:content-['']
+                        after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full
+                        after:h-5 after:w-5 after:transition-all peer-checked:bg-wm-blue"></div>
+          </label>
+        </div>
+
+        <!-- Candidates -->
+        <div>
+          <label for="num-candidates" class="block text-sm font-medium text-wm-text dark:text-dark-text mb-1">
+            Candidates
+          </label>
+          <input type="number" id="num-candidates" value="5" min="1" max="50"
+                 class="w-full px-3 py-2 border border-wm-border dark:border-dark-border rounded-md text-sm
+                        bg-white dark:bg-dark-raised dark:text-dark-text
+                        focus:ring-2 focus:ring-wm-blue focus:outline-none">
+          <p class="text-xs text-gray-500 dark:text-dark-muted mt-1">Top N stocks from screener for deep analysis</p>
+        </div>
+
+        <!-- Max Positions -->
+        <div>
+          <label for="max-positions" class="block text-sm font-medium text-wm-text dark:text-dark-text mb-1">
+            Max Positions
+          </label>
+          <input type="number" id="max-positions" value="10" min="1" max="50"
+                 class="w-full px-3 py-2 border border-wm-border dark:border-dark-border rounded-md text-sm
+                        bg-white dark:bg-dark-raised dark:text-dark-text
+                        focus:ring-2 focus:ring-wm-blue focus:outline-none">
+          <p class="text-xs text-gray-500 dark:text-dark-muted mt-1">Maximum portfolio positions</p>
+        </div>
+
+        <!-- Custom tickers (optional) -->
+        <div>
+          <label for="custom-tickers" class="block text-sm font-medium text-wm-text dark:text-dark-text mb-1">
+            Custom Tickers <span class="text-gray-400 font-normal">(optional)</span>
+          </label>
+          <input type="text" id="custom-tickers" placeholder="RELIANCE.NS, TCS.NS, INFY.NS"
+                 class="w-full px-3 py-2 border border-wm-border dark:border-dark-border rounded-md text-sm
+                        bg-white dark:bg-dark-raised dark:text-dark-text
+                        focus:ring-2 focus:ring-wm-blue focus:outline-none">
+          <p class="text-xs text-gray-500 dark:text-dark-muted mt-1">Comma-separated. Overrides screener if set.</p>
+        </div>
+
+        <!-- Dry Run toggle -->
+        <div class="flex items-center justify-between">
+          <div>
+            <label for="dry-run" class="text-sm font-medium text-wm-text dark:text-dark-text">Dry Run</label>
+            <p class="text-xs text-gray-500 dark:text-dark-muted">Analyze only — don't execute trades</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="dry-run" class="sr-only peer">
+            <div class="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:ring-2 peer-focus:ring-wm-blue rounded-full
+                        peer-checked:after:translate-x-full peer-checked:after:border-white after:content-['']
+                        after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full
+                        after:h-5 after:w-5 after:transition-all peer-checked:bg-wm-spark"></div>
+          </label>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="flex gap-3 pt-2">
+          <button type="button" id="start-btn" onclick="startPipeline()"
+                  class="flex-1 px-4 py-2.5 rounded-md text-sm font-semibold bg-wm-blue text-white hover:bg-wm-blueH transition
+                         disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:cursor-not-allowed">
+            ▶ Start Pipeline
+          </button>
+          <button type="button" id="stop-btn" onclick="stopPipeline()" disabled
+                  class="px-4 py-2.5 rounded-md text-sm font-semibold bg-wm-red text-white hover:bg-red-700 transition
+                         disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:cursor-not-allowed">
+            ■ Stop
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Live Log Window (2/3) -->
+    <div class="xl:col-span-2 flex flex-col bg-[#1e1e2e] rounded-lg overflow-hidden border border-wm-border dark:border-dark-border">
+      <!-- Terminal header -->
+      <div class="flex items-center justify-between px-4 py-2.5 bg-[#181825] border-b border-gray-700">
+        <div class="flex items-center gap-2">
+          <div class="flex gap-1.5">
+            <div class="w-3 h-3 rounded-full bg-red-500"></div>
+            <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+            <div class="w-3 h-3 rounded-full bg-green-500"></div>
+          </div>
+          <span class="text-xs text-gray-400 ml-2 font-mono">pipeline — live output</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="line-count" class="text-xs text-gray-500 font-mono">0 lines</span>
+          <span id="elapsed-time" class="text-xs text-gray-500 font-mono"></span>
+          <button onclick="clearLog()" class="text-xs text-gray-500 hover:text-gray-300 transition" title="Clear log">
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <!-- Log output area -->
+      <div id="log-output" class="flex-1 overflow-y-auto p-4 font-mono text-xs leading-relaxed min-h-[400px] max-h-[600px] space-y-0.5">
+        <div class="text-gray-500">Waiting for pipeline to start…</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let eventSource = null;
+  let lineCount = 0;
+  let elapsedInterval = null;
+  let startTime = null;
+
+  const logOutput = document.getElementById('log-output');
+  const startBtn = document.getElementById('start-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  const lineCountEl = document.getElementById('line-count');
+  const elapsedEl = document.getElementById('elapsed-time');
+
+  // Color map for log levels
+  const levelColors = {
+    'ERROR':   'text-red-400',
+    'WARNING': 'text-yellow-400',
+    'INFO':    'text-green-400',
+    'DEBUG':   'text-gray-500',
+    'CRITICAL':'text-red-500 font-bold',
+  };
+
+  function appendLogLine(entry) {
+    const div = document.createElement('div');
+    const levelClass = levelColors[entry.level] || 'text-gray-300';
+
+    // Highlight special lines
+    let msgClass = 'text-gray-300';
+    if (entry.message.includes('═') || entry.message.includes('━')) msgClass = 'text-blue-400';
+    else if (entry.message.includes('[RUNNER]')) msgClass = 'text-cyan-400 font-semibold';
+    else if (entry.message.includes('✅')) msgClass = 'text-green-400';
+    else if (entry.message.includes('❌') || entry.message.includes('ERROR')) msgClass = 'text-red-400';
+
+    const time = entry.timestamp ? entry.timestamp.split('T')[1]?.slice(0,8) || '' : '';
+
+    div.innerHTML = `<span class="text-gray-600 select-none">${time}</span> <span class="${levelClass}">[${entry.level.padEnd(7)}]</span> <span class="${msgClass}">${escapeHtml(entry.message)}</span>`;
+    logOutput.appendChild(div);
+
+    lineCount++;
+    lineCountEl.textContent = `${lineCount} lines`;
+
+    // Auto-scroll to bottom
+    logOutput.scrollTop = logOutput.scrollHeight;
+  }
+
+  function escapeHtml(text) {
+    const map = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'};
+    return text.replace(/[&<>"']/g, m => map[m]);
+  }
+
+  function setUIState(state) {
+    if (state === 'running') {
+      startBtn.disabled = true;
+      startBtn.textContent = '⏳ Running…';
+      stopBtn.disabled = false;
+    } else {
+      startBtn.disabled = false;
+      startBtn.textContent = '▶ Start Pipeline';
+      stopBtn.disabled = true;
+    }
+  }
+
+  function startElapsedTimer() {
+    startTime = Date.now();
+    elapsedInterval = setInterval(() => {
+      const secs = Math.floor((Date.now() - startTime) / 1000);
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      elapsedEl.textContent = `${m}m ${s.toString().padStart(2, '0')}s`;
+    }, 1000);
+  }
+
+  function stopElapsedTimer() {
+    if (elapsedInterval) clearInterval(elapsedInterval);
+  }
+
+  async function startPipeline() {
+    const config = {
+      use_screener: document.getElementById('use-screener').checked,
+      num_candidates: parseInt(document.getElementById('num-candidates').value) || 5,
+      max_positions: parseInt(document.getElementById('max-positions').value) || 10,
+      dry_run: document.getElementById('dry-run').checked,
+    };
+
+    const tickers = document.getElementById('custom-tickers').value.trim();
+    if (tickers) {
+      config.tickers = tickers.split(',').map(t => t.trim()).filter(Boolean);
+      config.use_screener = false;
+    }
+
+    clearLog();
+    setUIState('running');
+
+    try {
+      const resp = await fetch('/api/pipeline/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+      const data = await resp.json();
+
+      if (!data.success) {
+        appendLogLine({ timestamp: new Date().toISOString(), level: 'ERROR', message: data.message });
+        setUIState('idle');
+        return;
+      }
+
+      startElapsedTimer();
+      connectSSE();
+
+    } catch (err) {
+      appendLogLine({ timestamp: new Date().toISOString(), level: 'ERROR', message: `Failed to start: ${err.message}` });
+      setUIState('idle');
+    }
+  }
+
+  function connectSSE() {
+    if (eventSource) eventSource.close();
+
+    eventSource = new EventSource('/api/pipeline/stream');
+
+    eventSource.onmessage = (e) => {
+      try {
+        const entry = JSON.parse(e.data);
+        appendLogLine(entry);
+      } catch {}
+    };
+
+    eventSource.addEventListener('done', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        const status = data.status || 'complete';
+        appendLogLine({
+          timestamp: new Date().toISOString(),
+          level: status === 'complete' ? 'INFO' : 'ERROR',
+          message: `━━━ Pipeline ${status} ━━━`,
+        });
+      } catch {}
+      setUIState('idle');
+      stopElapsedTimer();
+      eventSource.close();
+      eventSource = null;
+    });
+
+    eventSource.onerror = () => {
+      setUIState('idle');
+      stopElapsedTimer();
+      eventSource.close();
+      eventSource = null;
+    };
+  }
+
+  async function stopPipeline() {
+    try {
+      await fetch('/api/pipeline/stop', { method: 'POST' });
+    } catch {}
+  }
+
+  function clearLog() {
+    logOutput.innerHTML = '<div class="text-gray-500">Waiting for pipeline to start…</div>';
+    lineCount = 0;
+    lineCountEl.textContent = '0 lines';
+    elapsedEl.textContent = '';
+    stopElapsedTimer();
+  }
+
+  // If pipeline is already running on page load, connect to the stream
+  {% if status.status == 'running' %}
+  document.addEventListener('DOMContentLoaded', () => {
+    setUIState('running');
+    startElapsedTimer();
+    logOutput.innerHTML = '';
+    connectSSE();
+  });
+  {% endif %}
+</script>
+{% endblock %}

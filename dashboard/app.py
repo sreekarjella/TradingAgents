@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Generator
 
@@ -264,6 +264,8 @@ async def page_orders(
     ticker: str = Query("ALL", alias="ticker"),
     side: str = Query("ALL", alias="side"),
     status: str = Query("ALL", alias="status"),
+    date_from: str = Query("", alias="date_from"),
+    date_to: str = Query("", alias="date_to"),
 ) -> HTMLResponse:
     """Full order history with filters."""
     sql = "SELECT * FROM orders WHERE 1=1"
@@ -278,11 +280,17 @@ async def page_orders(
     if status != "ALL":
         sql += " AND status = ?"
         params.append(status)
+    if date_from:
+        sql += " AND date(created_at) >= ?"
+        params.append(date_from)
+    if date_to:
+        sql += " AND date(created_at) <= ?"
+        params.append(date_to)
 
     sql += " ORDER BY created_at DESC"
     orders = query(PORTFOLIO_DB, sql, tuple(params))
 
-    # Summary stats
+    # Summary stats (unfiltered)
     all_orders = query(PORTFOLIO_DB, "SELECT * FROM orders")
     total_orders = len(all_orders)
     total_buys = sum(1 for o in all_orders if o["side"] == "BUY")
@@ -301,6 +309,8 @@ async def page_orders(
         "filter_ticker": ticker,
         "filter_side": side,
         "filter_status": status,
+        "filter_date_from": date_from,
+        "filter_date_to": date_to,
         "total_orders": total_orders,
         "total_buys": total_buys,
         "total_sells": total_sells,
@@ -309,9 +319,31 @@ async def page_orders(
 
 
 @app.get("/history", response_class=HTMLResponse)
-async def page_history(request: Request) -> HTMLResponse:
-    """Performance charts from daily snapshots."""
+async def page_history(
+    request: Request,
+    range: str = Query("ALL", alias="range"),
+    benchmark: str = Query("NIFTY50", alias="benchmark"),
+) -> HTMLResponse:
+    """Performance charts from daily snapshots with time range filter."""
     snapshots = query(PORTFOLIO_DB, "SELECT * FROM daily_snapshots ORDER BY date ASC")
+
+    # ── Time range filter ────────────────────────────────────────
+    range_days_map = {
+        "1W": 7, "1M": 30, "3M": 90, "6M": 180, "1Y": 365,
+    }
+    if range in range_days_map and snapshots:
+        cutoff = (date.today() - timedelta(days=range_days_map[range])).isoformat()
+        snapshots = [s for s in snapshots if s["date"] >= cutoff]
+
+    # ── Benchmark label mapping ──────────────────────────────────
+    benchmark_map = {
+        "NIFTY50":    {"ticker": "^NSEI",     "name": "NIFTY 50"},
+        "SENSEX":     {"ticker": "^BSESN",    "name": "SENSEX"},
+        "NIFTYBANK":  {"ticker": "^NSEBANK",  "name": "NIFTY Bank"},
+        "NIFTYIT":    {"ticker": "^CNXIT",    "name": "NIFTY IT"},
+        "NIFTYMIDCAP":{"ticker": "NIFTY_MID_SELECT.NS", "name": "NIFTY Midcap"},
+    }
+    bm_info = benchmark_map.get(benchmark, benchmark_map["NIFTY50"])
 
     dates = [s["date"] for s in snapshots]
     total_values = [s["total_value"] for s in snapshots]
@@ -356,6 +388,10 @@ async def page_history(request: Request) -> HTMLResponse:
         "alpha": alpha,
         "max_drawdown": max_drawdown,
         "snapshot_count": len(snapshots),
+        "selected_range": range,
+        "selected_benchmark": benchmark,
+        "benchmark_name": bm_info["name"],
+        "benchmark_map": benchmark_map,
     })
 
 
@@ -463,6 +499,15 @@ async def api_seed() -> JSONResponse:
         return JSONResponse({"success": True, "message": result})
     except Exception as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline + Log viewer routes (factored into separate router)
+# ---------------------------------------------------------------------------
+
+from dashboard.routes_pipeline import router as pipeline_router
+
+app.include_router(pipeline_router)
 
 
 # ---------------------------------------------------------------------------

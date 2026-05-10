@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Logs — Trading Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <!-- Page heading -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-wm-text dark:text-dark-text">Pipeline Logs</h1>
+      <p class="text-sm text-gray-500 dark:text-dark-muted mt-0.5">
+        Last 7 days — {{ log_files | length }} log file(s)
+        {% if cleaned_count > 0 %}
+          <span class="text-wm-green ml-1">({{ cleaned_count }} old file(s) auto-cleaned)</span>
+        {% endif %}
+      </p>
+    </div>
+    <button onclick="cleanupLogs()" id="cleanup-btn"
+            class="px-4 py-2 rounded-md text-sm font-medium border border-wm-border dark:border-dark-border
+                   text-wm-text dark:text-dark-text hover:bg-wm-subtle dark:hover:bg-dark-raised transition">
+      🧹 Cleanup Old Logs
+    </button>
+  </div>
+
+  {% if log_files | length == 0 %}
+  <!-- Empty state -->
+  <div class="flex flex-col items-center justify-center py-20 text-center">
+    <div class="w-16 h-16 rounded-full bg-wm-subtle dark:bg-dark-raised flex items-center justify-center mb-4">
+      <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+      </svg>
+    </div>
+    <h2 class="text-lg font-semibold text-wm-text dark:text-dark-text mb-1">No log files</h2>
+    <p class="text-sm text-gray-500 dark:text-dark-muted max-w-md">
+      Pipeline logs will appear here after you run the pipeline.
+      Go to <a href="/pipeline" class="text-wm-blue hover:underline">Pipeline Runner</a> to start.
+    </p>
+  </div>
+
+  {% else %}
+
+  <!-- Log files list -->
+  <div class="space-y-3">
+    {% for lf in log_files %}
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg overflow-hidden">
+      <!-- File header (clickable to expand) -->
+      <button type="button"
+              class="w-full flex items-center justify-between px-5 py-3 hover:bg-wm-subtle dark:hover:bg-dark-raised transition cursor-pointer"
+              onclick="toggleLogFile('{{ lf.filename }}')"
+              aria-expanded="false">
+        <div class="flex items-center gap-3">
+          <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          <div class="text-left">
+            <div class="text-sm font-semibold text-wm-text dark:text-dark-text font-mono">{{ lf.filename }}</div>
+            <div class="text-xs text-gray-500 dark:text-dark-muted">{{ lf.date }}</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-4">
+          <span class="text-xs text-gray-500 dark:text-dark-muted">{{ lf.line_count }} lines</span>
+          <span class="text-xs text-gray-500 dark:text-dark-muted">
+            {% if lf.size_bytes < 1024 %}{{ lf.size_bytes }} B
+            {% elif lf.size_bytes < 1048576 %}{{ "%.1f" | format(lf.size_bytes / 1024) }} KB
+            {% else %}{{ "%.1f" | format(lf.size_bytes / 1048576) }} MB
+            {% endif %}
+          </span>
+          <svg class="w-4 h-4 text-gray-400 transition-transform log-chevron-{{ lf.filename | replace('.', '-') }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </div>
+      </button>
+
+      <!-- Log content (lazy loaded) -->
+      <div id="log-content-{{ lf.filename | replace('.', '-') }}" class="hidden">
+        <div class="border-t border-wm-border dark:border-dark-border bg-[#1e1e2e] p-4 overflow-x-auto">
+          <pre id="log-pre-{{ lf.filename | replace('.', '-') }}"
+               class="font-mono text-xs text-gray-300 leading-relaxed whitespace-pre-wrap max-h-[500px] overflow-y-auto">
+            Loading…
+          </pre>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const loadedLogs = new Set();
+
+  async function toggleLogFile(filename) {
+    const safeId = filename.replaceAll('.', '-');
+    const contentEl = document.getElementById('log-content-' + safeId);
+    const chevron = document.querySelector('.log-chevron-' + safeId);
+    const preEl = document.getElementById('log-pre-' + safeId);
+
+    contentEl.classList.toggle('hidden');
+    if (chevron) chevron.classList.toggle('rotate-90');
+
+    // Lazy load content on first expand
+    if (!loadedLogs.has(filename) && !contentEl.classList.contains('hidden')) {
+      loadedLogs.add(filename);
+      try {
+        const resp = await fetch('/api/logs/' + encodeURIComponent(filename));
+        const data = await resp.json();
+        if (data.success) {
+          preEl.textContent = data.content;
+          // Color-code lines
+          colorizeLog(preEl);
+        } else {
+          preEl.textContent = 'Error loading log file.';
+        }
+      } catch (err) {
+        preEl.textContent = 'Failed to load: ' + err.message;
+      }
+    }
+  }
+
+  function colorizeLog(preEl) {
+    const html = preEl.textContent.split('\n').map(line => {
+      let cls = 'text-gray-300';
+      if (line.includes('[ERROR]') || line.includes('[CRITICAL]')) cls = 'text-red-400';
+      else if (line.includes('[WARNING]')) cls = 'text-yellow-400';
+      else if (line.includes('✅') || line.includes('COMPLETE')) cls = 'text-green-400';
+      else if (line.includes('═') || line.includes('━') || line.includes('🐶')) cls = 'text-blue-400';
+      else if (line.includes('🔍') || line.includes('📊') || line.includes('📋')) cls = 'text-cyan-400';
+      return `<span class="${cls}">${escapeHtml(line)}</span>`;
+    }).join('\n');
+    preEl.innerHTML = html;
+  }
+
+  function escapeHtml(text) {
+    const map = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'};
+    return text.replace(/[&<>"']/g, m => map[m]);
+  }
+
+  async function cleanupLogs() {
+    const btn = document.getElementById('cleanup-btn');
+    btn.disabled = true;
+    btn.textContent = '🧹 Cleaning…';
+    try {
+      const resp = await fetch('/api/logs/cleanup', { method: 'POST' });
+      const data = await resp.json();
+      if (data.success) {
+        btn.textContent = `✅ ${data.message}`;
+        setTimeout(() => window.location.reload(), 1500);
+      }
+    } catch (err) {
+      btn.textContent = '❌ Failed';
+    }
+    btn.disabled = false;
+  }
+</script>
+{% endblock %}

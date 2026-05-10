@@ -4,8 +4,37 @@
 {% block content %}
 <div class="space-y-6">
 
-  <!-- Page heading -->
-  <h1 class="text-2xl font-bold text-wm-text dark:text-dark-text">Performance</h1>
+  <!-- Page heading + filters -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <h1 class="text-2xl font-bold text-wm-text dark:text-dark-text">Performance</h1>
+
+    <div class="flex flex-wrap items-center gap-3">
+      <!-- Time range pills -->
+      <div class="flex rounded-lg border border-wm-border dark:border-dark-border overflow-hidden text-sm" role="group" aria-label="Time range">
+        {% for r in ['1W', '1M', '3M', '6M', '1Y', 'ALL'] %}
+        <a href="/history?range={{ r }}&benchmark={{ selected_benchmark }}"
+           class="px-3 py-1.5 font-medium transition
+                  {% if selected_range == r %}bg-wm-blue text-white{% else %}bg-white dark:bg-dark-card text-wm-text dark:text-dark-text hover:bg-wm-subtle dark:hover:bg-dark-raised{% endif %}
+                  {% if not loop.last %}border-r border-wm-border dark:border-dark-border{% endif %}"
+           aria-current="{% if selected_range == r %}true{% endif %}">
+          {{ r }}
+        </a>
+        {% endfor %}
+      </div>
+
+      <!-- Benchmark selector -->
+      <form method="get" action="/history" class="flex items-center gap-2">
+        <input type="hidden" name="range" value="{{ selected_range }}">
+        <label for="benchmark-select" class="text-xs font-medium text-gray-500 dark:text-dark-muted">vs</label>
+        <select id="benchmark-select" name="benchmark" onchange="this.form.submit()"
+                class="rounded-md border border-wm-border dark:border-dark-border bg-white dark:bg-dark-card dark:text-dark-text px-3 py-1.5 text-sm focus:ring-2 focus:ring-wm-blue focus:outline-none">
+          {% for key, bm in benchmark_map.items() %}
+          <option value="{{ key }}" {% if selected_benchmark == key %}selected{% endif %}>{{ bm.name }}</option>
+          {% endfor %}
+        </select>
+      </form>
+    </div>
+  </div>
 
   {% if not has_data %}
   <!-- Empty state -->
@@ -26,7 +55,7 @@
   {% else %}
 
   <!-- Cumulative stats -->
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+  <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
     <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
       <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Total Return</div>
       <div class="text-2xl font-bold {{ total_return_pct | pnl_color }}">
@@ -34,7 +63,7 @@
       </div>
     </div>
     <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
-      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Alpha vs Benchmark</div>
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Alpha vs {{ benchmark_name }}</div>
       <div class="text-2xl font-bold {{ alpha | pnl_color }}">
         {{ alpha | fmt_pct }}
       </div>
@@ -46,6 +75,10 @@
       </div>
     </div>
     <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Benchmark</div>
+      <div class="text-xl font-bold text-wm-spark">{{ benchmark_name }}</div>
+    </div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
       <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Data Points</div>
       <div class="text-2xl font-bold text-wm-text dark:text-dark-text">{{ snapshot_count }} days</div>
     </div>
@@ -53,7 +86,12 @@
 
   <!-- Portfolio Value Chart -->
   <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-5">
-    <h2 class="text-base font-semibold text-wm-text dark:text-dark-text mb-4">Portfolio Value vs Benchmark</h2>
+    <h2 class="text-base font-semibold text-wm-text dark:text-dark-text mb-4">
+      Portfolio Value vs {{ benchmark_name }}
+      <span class="text-sm font-normal text-gray-500 dark:text-dark-muted ml-2">
+        {{ selected_range }}{% if selected_range != 'ALL' %} window{% endif %}
+      </span>
+    </h2>
     <div style="height: 350px; position: relative;">
       <canvas id="valueChart"></canvas>
     </div>
@@ -79,10 +117,12 @@ document.addEventListener('DOMContentLoaded', function() {
   const totalValues = {{ total_values | tojson }};
   const benchmarkValues = {{ benchmark_values | tojson }};
   const dailyReturns = {{ daily_returns | tojson }};
+  const benchmarkName = {{ benchmark_name | tojson }};
   const isDark = document.documentElement.classList.contains('dark');
 
   const gridColor = isDark ? '#374151' : '#f0f0f0';
   const tickColor = isDark ? '#9ca3af' : '#9b9b9b';
+  const textColor = isDark ? '#e5e5e5' : '#2e2f32';
 
   // ─── Portfolio Value Line Chart ───
   new Chart(document.getElementById('valueChart'), {
@@ -103,7 +143,7 @@ document.addEventListener('DOMContentLoaded', function() {
           yAxisID: 'y',
         },
         {
-          label: 'Benchmark',
+          label: benchmarkName,
           data: benchmarkValues,
           borderColor: '#ffc220',
           backgroundColor: 'transparent',
@@ -125,7 +165,7 @@ document.addEventListener('DOMContentLoaded', function() {
           labels: {
             usePointStyle: true, padding: 20,
             font: { size: 12 },
-            color: isDark ? '#e5e5e5' : '#2e2f32',
+            color: textColor,
           }
         },
         tooltip: {
@@ -158,7 +198,7 @@ document.addEventListener('DOMContentLoaded', function() {
             font: { size: 11 }, color: '#995213',
             callback: v => v.toLocaleString('en-IN')
           },
-          title: { display: true, text: 'Benchmark', color: '#995213', font: { size: 12 } }
+          title: { display: true, text: benchmarkName, color: '#995213', font: { size: 12 } }
         }
       }
     }
