@@ -25,6 +25,7 @@ from .broker import BrokerInterface, Order
 from .executor import TradeAction, execute_trade, resolve_trade
 from .portfolio import daily_pnl_report, portfolio_report
 from .pre_screener import NIFTY_50, ScreenResult, pre_screen
+from .run_tracker import RunTracker
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,7 @@ def run_single(
     dry_run: bool = False,
     sizing: dict | None = None,
     guardrails: dict | None = None,
+    tracker: RunTracker | None = None,
 ) -> RunResult:
     """Run pipeline + executor for a single ticker.
 
@@ -77,10 +79,25 @@ def run_single(
         dry_run: If True, resolve trades but don't execute.
         sizing: Position sizing overrides from config.toml.
         guardrails: Trade guardrails from config.toml.
+        tracker: RunTracker for duplicate detection. None = no check.
 
     Returns:
         RunResult with rating, action, and order details.
     """
+    # ── Duplicate check ──────────────────────────────────────────────
+    if tracker and tracker.was_analyzed_today(ticker, date=trade_date):
+        logger.info("⚠️  SKIP %s — already analyzed today", ticker)
+        return RunResult(
+            ticker=ticker, rating="Duplicate",
+            trade_action=TradeAction(
+                ticker=ticker, rating="Duplicate", side=None, quantity=0,
+                estimated_price=0, estimated_value=0,
+                rationale="Already analyzed today — duplicate blocked.",
+                skipped=True, skip_reason="Duplicate: already analyzed today",
+            ),
+            duration_secs=0.0,
+        )
+
     start = datetime.now()
     logger.info("━" * 50)
     logger.info("Analyzing %s...", ticker)
@@ -103,6 +120,16 @@ def run_single(
         order = execute_trade(trade, broker, dry_run=dry_run)
 
         duration = (datetime.now() - start).total_seconds()
+
+        # Log successful run
+        if tracker:
+            tracker.log_run(
+                ticker, rating=rating,
+                trade_side=trade.side if not trade.skipped else None,
+                trade_qty=trade.quantity if not trade.skipped else 0,
+                duration_secs=duration,
+            )
+
         return RunResult(
             ticker=ticker, rating=rating, trade_action=trade,
             order=order, duration_secs=duration,
@@ -111,6 +138,11 @@ def run_single(
     except Exception as e:
         duration = (datetime.now() - start).total_seconds()
         logger.error("ERROR analyzing %s: %s", ticker, e, exc_info=True)
+
+        # Log failed run (won't block re-analysis — only successes count)
+        if tracker:
+            tracker.log_run(ticker, error=str(e), duration_secs=duration)
+
         return RunResult(
             ticker=ticker, rating="Error", error=str(e),
             trade_action=TradeAction(
@@ -177,6 +209,9 @@ def run_daily(
     universe = universe or DEFAULT_UNIVERSE
     start = datetime.now()
 
+    # ── Initialize run tracker for duplicate detection ───────────────
+    tracker = RunTracker()
+
     report = DailyReport(date=trade_date)
 
     logger.info("=" * 60)
@@ -199,6 +234,7 @@ def run_daily(
                 result = run_single(
                     ticker, broker, graph, trade_date, dry_run,
                     sizing=sizing, guardrails=guardrails,
+                    tracker=tracker,
                 )
                 report.results.append(result)
 
@@ -239,6 +275,7 @@ def run_daily(
             result = run_single(
                 ticker, broker, graph, trade_date, dry_run,
                 sizing=sizing, guardrails=guardrails,
+                tracker=tracker,
             )
             report.results.append(result)
 
@@ -287,10 +324,12 @@ def _log_daily_summary(report: DailyReport) -> None:
 
     # Trades executed
     executed = [r for r in report.results if r.order and r.order.status == "FILLED"]
-    skipped = [r for r in report.results if r.trade_action.skipped]
+    skipped = [r for r in report.results if r.trade_action.skipped and r.rating != "Duplicate"]
+    duplicates = [r for r in report.results if r.rating == "Duplicate"]
     errors = [r for r in report.results if r.error]
 
-    logger.info("Executed: %d | Skipped: %d | Errors: %d", len(executed), len(skipped), len(errors))
+    logger.info("Executed: %d | Skipped: %d | Duplicates blocked: %d | Errors: %d",
+                len(executed), len(skipped), len(duplicates), len(errors))
 
     for r in executed:
         logger.info(

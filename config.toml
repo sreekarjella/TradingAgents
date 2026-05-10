@@ -99,7 +99,7 @@ tickers = [
 [screener]
 enabled = true         # Set to false to skip screening and use the first N tickers from the universe
 buy_bias = true        # true = favor stocks worth buying (default). false = rank by raw "interestingness"
-candidates = 5         # How many top stocks to send to the full pipeline
+candidates = 1         # How many top stocks to send to the full pipeline
 
 # Scoring weights — how much each signal matters (total = 100)
 # Increase a weight to make that signal more important.
