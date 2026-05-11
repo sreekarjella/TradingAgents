@@ -1,0 +1,36 @@
+{# HTMX partial: list of run cards for the analysis sidebar #}
+{% if runs|length == 0 %}
+<div class="px-4 py-8 text-center text-sm text-gray-500 dark:text-dark-muted">
+  No runs match your filters.
+</div>
+{% endif %}
+
+{% set ns = namespace(current_date='') %}
+{% for run in runs %}
+  {# Date group header #}
+  {% if run.trade_date != ns.current_date %}
+    {% set ns.current_date = run.trade_date %}
+    <div class="px-4 py-2 bg-wm-subtle dark:bg-dark-raised text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase tracking-wider sticky top-0">
+      {{ run.trade_date }}
+    </div>
+  {% endif %}
+
+  <button
+    class="w-full text-left px-4 py-3 hover:bg-blue-50/60 dark:hover:bg-blue-900/20 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-wm-blue group"
+    hx-get="/api/analysis/detail/{{ run.run_id }}"
+    hx-target="#detail-panel"
+    hx-swap="innerHTML"
+    aria-label="View {{ run.ticker }} analysis for {{ run.trade_date }}">
+    <div class="flex items-center justify-between">
+      <div>
+        <span class="text-sm font-semibold text-wm-text dark:text-dark-text group-hover:text-wm-blue transition">
+          {{ run.ticker }}
+        </span>
+      </div>
+      {{ rating_badge(run.rating) }}
+    </div>
+    <div class="text-xs text-gray-400 dark:text-dark-muted mt-1">
+      {{ run.trade_date }}
+    </div>
+  </button>
+{% endfor %}

@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Pipeline Analysis — Trading Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <!-- ═══ Page heading + filters ═══ -->
+  <div class="flex flex-col lg:flex-row lg:items-end gap-4">
+    <div class="flex-1">
+      <h1 class="text-2xl font-bold text-wm-text dark:text-dark-text">Pipeline Analysis</h1>
+      <p class="text-sm text-gray-500 dark:text-dark-muted mt-0.5">
+        Step-by-step analysis from each pipeline run
+      </p>
+    </div>
+
+    <!-- Filter bar -->
+    <form class="flex flex-wrap items-end gap-3"
+          hx-get="/api/analysis/runs"
+          hx-target="#run-list"
+          hx-swap="innerHTML"
+          hx-trigger="change, submit"
+          hx-push-url="false">
+
+      <div>
+        <label for="from_date" class="block text-xs font-medium text-gray-500 dark:text-dark-muted mb-1">From</label>
+        <input type="date" id="from_date" name="from_date" value="{{ from_date }}"
+               class="px-3 py-2 rounded-md border border-wm-border dark:border-dark-border bg-white dark:bg-dark-raised text-sm text-wm-text dark:text-dark-text focus:ring-2 focus:ring-wm-blue focus:border-wm-blue">
+      </div>
+
+      <div>
+        <label for="to_date" class="block text-xs font-medium text-gray-500 dark:text-dark-muted mb-1">To</label>
+        <input type="date" id="to_date" name="to_date" value="{{ to_date }}"
+               class="px-3 py-2 rounded-md border border-wm-border dark:border-dark-border bg-white dark:bg-dark-raised text-sm text-wm-text dark:text-dark-text focus:ring-2 focus:ring-wm-blue focus:border-wm-blue">
+      </div>
+
+      <div>
+        <label for="ticker" class="block text-xs font-medium text-gray-500 dark:text-dark-muted mb-1">Ticker</label>
+        <select id="ticker" name="ticker"
+                class="px-3 py-2 rounded-md border border-wm-border dark:border-dark-border bg-white dark:bg-dark-raised text-sm text-wm-text dark:text-dark-text focus:ring-2 focus:ring-wm-blue focus:border-wm-blue">
+          <option value="">All Tickers</option>
+          {% for t in tickers %}
+          <option value="{{ t }}" {% if t == selected_ticker %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <button type="submit"
+              class="px-4 py-2 rounded-md text-sm font-medium bg-wm-blue text-white hover:bg-wm-blueH transition">
+        Filter
+      </button>
+
+      <button type="button"
+              onclick="document.getElementById('from_date').value=''; document.getElementById('to_date').value=''; document.getElementById('ticker').value=''; htmx.trigger(this.closest('form'), 'submit')"
+              class="px-4 py-2 rounded-md text-sm font-medium border border-wm-border dark:border-dark-border text-gray-600 dark:text-dark-muted hover:bg-wm-subtle dark:hover:bg-dark-raised transition">
+        Clear
+      </button>
+    </form>
+  </div>
+
+  <!-- ═══ Two-column layout: Run list + Detail panel ═══ -->
+  <div class="flex flex-col lg:flex-row gap-6" style="min-height: 600px;">
+
+    <!-- ─── Left: Run list ─── -->
+    <div class="w-full lg:w-72 xl:w-80 shrink-0">
+      <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg overflow-hidden">
+        <div class="px-4 py-3 border-b border-wm-border dark:border-dark-border">
+          <h2 class="text-sm font-semibold text-wm-text dark:text-dark-text">
+            Runs
+            <span class="text-gray-400 dark:text-dark-muted font-normal">({{ runs|length }})</span>
+          </h2>
+        </div>
+        <div id="run-list" class="divide-y divide-wm-border dark:divide-dark-border max-h-[600px] overflow-y-auto">
+          {% include "_analysis_run_list.html" %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Right: Detail panel ─── -->
+    <div class="flex-1 min-w-0">
+      <div id="detail-panel">
+        {% if detail %}
+          {% include "_analysis_detail.html" %}
+        {% else %}
+          <div class="flex flex-col items-center justify-center py-20 text-center bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg">
+            <div class="w-16 h-16 rounded-full bg-wm-subtle dark:bg-dark-raised flex items-center justify-center mb-4">
+              <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+              </svg>
+            </div>
+            <h2 class="text-lg font-semibold text-wm-text dark:text-dark-text mb-1">No runs available</h2>
+            <p class="text-sm text-gray-500 dark:text-dark-muted max-w-md">
+              Run the pipeline to generate analysis data, then come back here to explore each step.
+            </p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

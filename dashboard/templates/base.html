@@ -71,6 +71,8 @@
     html.transitioning, html.transitioning * {
       transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease !important;
     }
+    /* Alpine.js: hide elements until Alpine initialises */
+    [x-cloak] { display: none !important; }
   </style>
 </head>
 
@@ -144,6 +146,17 @@
                   d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
           </svg>
           Run History
+        </a>
+
+        <a href="/analysis"
+           class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition
+                  {% if page == 'analysis' %}nav-active{% else %}text-wm-text dark:text-dark-text{% endif %}"
+           aria-current="{% if page == 'analysis' %}page{% endif %}">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+          </svg>
+          Analysis
         </a>
 
         <div class="my-2 border-t border-wm-border dark:border-dark-border"></div>
@@ -263,6 +276,7 @@
             <a href="/orders"    class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'orders' %}nav-active{% endif %}">📋 Orders</a>
             <a href="/history"   class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'history' %}nav-active{% endif %}">📈 Performance</a>
             <a href="/runs"      class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'runs' %}nav-active{% endif %}">🕒 Run History</a>
+            <a href="/analysis"  class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'analysis' %}nav-active{% endif %}">📝 Analysis</a>
             <div class="my-2 border-t border-wm-border dark:border-dark-border"></div>
             <a href="/pipeline"  class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'pipeline' %}nav-active{% endif %}">▶️ Pipeline Runner</a>
             <a href="/logs"      class="nav-link block px-3 py-2.5 rounded-md text-sm font-medium {% if page == 'logs' %}nav-active{% endif %}">📄 Logs</a>

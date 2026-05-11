@@ -1,0 +1,154 @@
+{# HTMX partial: detailed analysis view for a single pipeline run #}
+
+<div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg overflow-hidden"
+     x-data="{ activeTab: '{{ detail.steps[0].key if detail.steps else '' }}' }">
+
+  <!-- ═══ Header: Ticker + Date + Rating ═══ -->
+  <div class="px-6 py-4 border-b border-wm-border dark:border-dark-border flex items-center justify-between">
+    <div>
+      <h2 class="text-xl font-bold text-wm-text dark:text-dark-text">{{ detail.ticker }}</h2>
+      <p class="text-sm text-gray-500 dark:text-dark-muted">{{ detail.trade_date }}</p>
+    </div>
+    {{ rating_badge(detail.rating) }}
+  </div>
+
+  <!-- ═══ Pipeline flow diagram ═══ -->
+  <div class="px-6 py-4 border-b border-wm-border dark:border-dark-border overflow-x-auto">
+    <div class="flex items-center gap-1 min-w-max">
+      {% for step in detail.steps %}
+        <!-- Step node -->
+        <button
+          @click="activeTab = '{{ step.key }}'"
+          :class="activeTab === '{{ step.key }}'
+            ? 'bg-wm-blue text-white shadow-sm'
+            : 'bg-wm-subtle dark:bg-dark-raised text-gray-600 dark:text-dark-muted hover:bg-blue-50 dark:hover:bg-blue-900/20'"
+          class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition cursor-pointer whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-wm-blue"
+          :aria-selected="activeTab === '{{ step.key }}'"
+          role="tab">
+          <span class="text-sm">{{ step.icon }}</span>
+          <span class="hidden sm:inline">{{ step.label }}</span>
+        </button>
+
+        {% if not loop.last %}
+        <!-- Arrow connector -->
+        <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+        </svg>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ═══ Tab content panels ═══ -->
+  <div class="px-6 py-5">
+    {% for step in detail.steps %}
+    <div x-show="activeTab === '{{ step.key }}'"
+         x-cloak
+         role="tabpanel"
+         class="prose prose-sm dark:prose-invert max-w-none
+                prose-headings:text-wm-text dark:prose-headings:text-dark-text
+                prose-table:text-sm prose-th:text-left
+                prose-th:px-3 prose-th:py-2
+                prose-td:px-3 prose-td:py-2
+                prose-table:border prose-table:border-wm-border dark:prose-table:border-dark-border
+                prose-th:bg-wm-subtle dark:prose-th:bg-dark-raised
+                prose-tr:border-b prose-tr:border-wm-border dark:prose-tr:border-dark-border">
+
+      <!-- Step header -->
+      <div class="flex items-center gap-2 mb-4 not-prose">
+        <span class="text-2xl">{{ step.icon }}</span>
+        <h3 class="text-lg font-bold text-wm-text dark:text-dark-text">{{ step.label }}</h3>
+        <span class="text-xs text-gray-400 dark:text-dark-muted ml-auto">
+          {{ step.content|length|string }} chars
+        </span>
+      </div>
+
+      <!-- Rendered markdown content -->
+      <div id="md-{{ step.key }}" class="analysis-md-content">
+        {# Markdown will be rendered client-side by marked.js #}
+        <pre class="whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-300 font-sans leading-relaxed hidden"
+             data-md-source>{{ step.content }}</pre>
+        <noscript>
+          <pre class="whitespace-pre-wrap text-sm">{{ step.content }}</pre>
+        </noscript>
+      </div>
+    </div>
+    {% endfor %}
+
+    {% if not detail.steps %}
+    <p class="text-gray-500 dark:text-dark-muted text-sm py-8 text-center">
+      No analysis steps found in this run.
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Alpine.js (lightweight, for tab switching only) -->
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js" defer></script>
+
+<!-- marked.js for markdown rendering -->
+<script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
+<script>
+(function() {
+  // Configure marked for clean rendering
+  marked.setOptions({
+    breaks: true,
+    gfm: true,
+  });
+
+  function renderMarkdown() {
+    document.querySelectorAll('.analysis-md-content').forEach(container => {
+      const source = container.querySelector('[data-md-source]');
+      if (!source || source.dataset.rendered) return;
+
+      const md = source.textContent;
+      const rendered = document.createElement('div');
+      rendered.innerHTML = marked.parse(md);
+
+      // Style tables with Walmart colors
+      rendered.querySelectorAll('table').forEach(table => {
+        table.classList.add('w-full', 'text-sm', 'border-collapse');
+        table.querySelectorAll('th').forEach(th => {
+          th.classList.add('text-left', 'px-3', 'py-2', 'font-semibold',
+            'bg-gray-50', 'dark:bg-dark-raised', 'border', 'border-gray-200',
+            'dark:border-gray-700', 'text-wm-text', 'dark:text-dark-text');
+        });
+        table.querySelectorAll('td').forEach(td => {
+          td.classList.add('px-3', 'py-2', 'border', 'border-gray-200',
+            'dark:border-gray-700');
+        });
+      });
+
+      // Style bold rating keywords
+      rendered.querySelectorAll('strong').forEach(el => {
+        const text = el.textContent.toLowerCase();
+        if (text.includes('buy') || text.includes('overweight')) {
+          el.classList.add('text-[#2a8703]');
+        } else if (text.includes('sell') || text.includes('underweight')) {
+          el.classList.add('text-[#ea1100]');
+        } else if (text.includes('hold') || text.includes('neutral')) {
+          el.classList.add('text-wm-blue');
+        }
+      });
+
+      source.after(rendered);
+      source.dataset.rendered = 'true';
+    });
+  }
+
+  // Render on load and whenever HTMX swaps content
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', renderMarkdown);
+  } else {
+    renderMarkdown();
+  }
+  document.addEventListener('htmx:afterSwap', renderMarkdown);
+
+  // Also render when Alpine shows a tab (for lazy rendering)
+  const observer = new MutationObserver(renderMarkdown);
+  const panel = document.getElementById('detail-panel');
+  if (panel) {
+    observer.observe(panel, { childList: true, subtree: true, attributes: true });
+  }
+})();
+</script>
