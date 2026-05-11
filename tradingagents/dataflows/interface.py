@@ -135,8 +135,27 @@ def get_vendor(category: str, method: str = None) -> str:
     # Fall back to category-level configuration
     return config.get("data_vendors", {}).get(category, "default")
 
+# Phrases that signal an empty/no-data result — triggers fallback to next vendor.
+_EMPTY_MARKERS = ("no ", "not found", "no data", "unavailable", "error ")
+
+
+def _is_empty_result(result) -> bool:
+    """Return True if the vendor result indicates no useful data was returned."""
+    if not result:
+        return True
+    if isinstance(result, str) and len(result) < 200:
+        lower = result.lower()
+        return any(lower.startswith(m) or m in lower for m in _EMPTY_MARKERS)
+    return False
+
+
 def route_to_vendor(method: str, *args, **kwargs):
-    """Route method calls to appropriate vendor implementation with fallback support."""
+    """Route method calls to appropriate vendor implementation with fallback support.
+
+    Fallback is triggered when:
+    - The vendor raises ``AlphaVantageRateLimitError``
+    - The vendor returns an empty / "no data" result
+    """
     category = get_category_for_method(method)
     vendor_config = get_vendor(category, method)
     primary_vendors = [v.strip() for v in vendor_config.split(',')]
@@ -151,6 +170,7 @@ def route_to_vendor(method: str, *args, **kwargs):
         if vendor not in fallback_vendors:
             fallback_vendors.append(vendor)
 
+    last_result = None
     for vendor in fallback_vendors:
         if vendor not in VENDOR_METHODS[method]:
             continue
@@ -159,8 +179,15 @@ def route_to_vendor(method: str, *args, **kwargs):
         impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
 
         try:
-            return impl_func(*args, **kwargs)
+            result = impl_func(*args, **kwargs)
+            if _is_empty_result(result) and vendor != fallback_vendors[-1]:
+                last_result = result  # keep it in case all vendors are empty
+                continue
+            return result
         except AlphaVantageRateLimitError:
-            continue  # Only rate limits trigger fallback
+            continue
 
+    # All vendors tried — return whatever the last one gave us.
+    if last_result is not None:
+        return last_result
     raise RuntimeError(f"No available vendor for '{method}'")

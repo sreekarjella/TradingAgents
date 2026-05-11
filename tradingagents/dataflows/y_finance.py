@@ -339,7 +339,13 @@ def get_cashflow(
     freq: Annotated[str, "frequency of data: 'annual' or 'quarterly'"] = "quarterly",
     curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None
 ):
-    """Get cash flow data from yfinance."""
+    """Get cash flow data from yfinance.
+
+    For Indian (`.NS` / `.BO`) tickers, yfinance often returns empty
+    cash flow data.  When quarterly data is empty we automatically
+    fall back to annual; if both are empty we return a clear message
+    so the LLM analyst isn't confused.
+    """
     try:
         ticker_obj = yf.Ticker(ticker.upper())
 
@@ -348,10 +354,21 @@ def get_cashflow(
         else:
             data = yf_retry(lambda: ticker_obj.cashflow)
 
+        # Fallback: if requested quarterly is empty, try annual
+        if (data is None or data.empty) and freq.lower() == "quarterly":
+            data = yf_retry(lambda: ticker_obj.cashflow)
+            if data is not None and not data.empty:
+                freq = "annual (quarterly unavailable)"
+
         data = filter_financials_by_date(data, curr_date)
 
-        if data.empty:
-            return f"No cash flow data found for symbol '{ticker}'"
+        if data is None or data.empty:
+            return (
+                f"No cash flow data available for '{ticker}' via yfinance. "
+                "This is a known limitation for many Indian (NSE/BSE) stocks. "
+                "Use balance sheet and income statement data instead for "
+                "financial health analysis."
+            )
             
         # Convert to CSV string for consistency with other functions
         csv_string = data.to_csv()

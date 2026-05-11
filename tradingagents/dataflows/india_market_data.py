@@ -106,9 +106,9 @@ class _NseClient:
                     len(self._session.cookies),
                 )
                 return True
-            logger.warning("NSE homepage returned %d", resp.status_code)
+            logger.debug("NSE homepage returned %d", resp.status_code)
         except Exception as exc:
-            logger.debug("NSE cookie warmup error: %s", exc, exc_info=True)
+            logger.debug("NSE cookie warmup error: %s", exc)
 
         return False
 
@@ -404,7 +404,7 @@ def _fii_dii_from_nse(curr_date: str, look_back_days: int) -> Optional[str]:
     data = client.fetch_json(_NSE_FII_DII_URL)
 
     if not data:
-        logger.warning("NSE FII/DII API returned no data")
+        logger.info("NSE FII/DII API returned no data (expected on corporate networks)")
         return None
 
     # NSE returns a list of dicts with keys:
@@ -420,7 +420,7 @@ def _fii_dii_from_nse(curr_date: str, look_back_days: int) -> Optional[str]:
         })
 
     if not rows:
-        logger.warning("NSE FII/DII response was empty or unexpected format")
+        logger.info("NSE FII/DII response was empty or unexpected format")
         return None
 
     fii_rows = [

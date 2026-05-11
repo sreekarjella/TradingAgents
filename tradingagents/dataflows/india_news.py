@@ -3,17 +3,26 @@
 Fetches financial news from Indian sources (Economic Times, Moneycontrol,
 LiveMint) via RSS feeds.  Drop-in replacement for the yfinance news functions
 when the ``india_rss`` vendor is selected.
+
+Uses ``requests`` instead of ``urllib`` so Walmart's proxy (which
+requires NTLM auth) is handled transparently via environment variables.
 """
 
 import logging
 from datetime import datetime, timedelta
 from time import mktime
 from typing import Optional
-from urllib.request import Request, urlopen
 
 import feedparser  # type: ignore[import-untyped]
+import requests
+from requests.exceptions import ConnectionError as ReqConnectionError, ProxyError
 
 logger = logging.getLogger(__name__)
+
+# Per-process cache of domains that returned proxy / connection errors.
+# Avoids wasting ~1s per feed on retries that will never succeed within
+# the same pipeline run (e.g. ET + Moneycontrol blocked by Walmart proxy).
+_failed_domains: set[str] = set()
 
 _MARKET_FEEDS: list[str] = [
     "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
@@ -82,21 +91,47 @@ def _source_label(feed_url: str) -> str:
     return "Unknown"
 
 
+def _extract_domain(url: str) -> str:
+    """Extract domain from a feed URL for failure tracking."""
+    try:
+        from urllib.parse import urlparse
+        return urlparse(url).netloc
+    except Exception:
+        return url
+
+
 def _fetch_entries(
     feed_urls: list[str],
     start_dt: datetime,
     end_dt: datetime,
 ) -> list[dict]:
-    """Fetch and date-filter entries from multiple RSS feeds."""
+    """Fetch and date-filter entries from multiple RSS feeds.
+
+    Uses ``requests.get`` so the ``HTTP_PROXY`` / ``HTTPS_PROXY``
+    environment variables set by ``network.configure_network()`` are
+    picked up automatically — unlike ``urllib.request`` which fails
+    with a 407 on the Walmart proxy.
+
+    Domains that fail with a connection/proxy error are cached for the
+    lifetime of the process so subsequent calls skip them instantly.
+    """
     entries: list[dict] = []
     seen_titles: set[str] = set()
 
     for url in feed_urls:
+        domain = _extract_domain(url)
+        if domain in _failed_domains:
+            logger.debug("Skipping previously-failed domain: %s", domain)
+            continue
+
         try:
-            req = Request(url, headers={"User-Agent": "TradingAgents/1.0"})
-            with urlopen(req, timeout=_FEED_TIMEOUT_SECS) as resp:
-                raw = resp.read()
-            feed = feedparser.parse(raw)
+            resp = requests.get(
+                url,
+                headers={"User-Agent": "TradingAgents/1.0"},
+                timeout=_FEED_TIMEOUT_SECS,
+            )
+            resp.raise_for_status()
+            feed = feedparser.parse(resp.content)
             if feed.bozo and not feed.entries:
                 logger.warning("RSS feed returned no entries: %s", url)
                 continue
@@ -116,8 +151,13 @@ def _fetch_entries(
                     "publisher": source,
                     "pub_date": pub_date,
                 })
+        except (ReqConnectionError, ProxyError) as exc:
+            _failed_domains.add(domain)
+            logger.warning("RSS feed blocked (%s) — will skip for this session: %s", _source_label(url), exc)
+        except requests.RequestException as exc:
+            logger.warning("RSS feed unavailable (%s): %s", _source_label(url), exc)
         except Exception:
-            logger.exception("Error fetching RSS feed: %s", url)
+            logger.warning("Error parsing RSS feed: %s", url, exc_info=True)
 
     entries.sort(key=lambda e: e.get("pub_date") or datetime.min, reverse=True)
     return entries
