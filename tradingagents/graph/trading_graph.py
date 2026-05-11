@@ -192,6 +192,17 @@ class TradingAgentsGraph:
         """
         try:
             start = datetime.strptime(trade_date, "%Y-%m-%d")
+
+            # Short-circuit: if the holding period hasn't elapsed yet,
+            # yfinance has no post-trade data to fetch and would log a
+            # scary "possibly delisted" ERROR for a perfectly normal stock.
+            if start + timedelta(days=holding_days) > datetime.now():
+                logger.debug(
+                    "Skipping return fetch for %s on %s — holding period not yet elapsed",
+                    ticker, trade_date,
+                )
+                return None, None, None
+
             end = start + timedelta(days=holding_days + 7)  # buffer for weekends/holidays
             end_str = end.strftime("%Y-%m-%d")
 
