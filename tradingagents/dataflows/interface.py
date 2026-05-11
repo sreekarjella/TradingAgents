@@ -1,4 +1,7 @@
+import logging
 from typing import Annotated
+
+logger = logging.getLogger(__name__)
 
 # Import from vendor-specific modules
 from .y_finance import (
@@ -170,7 +173,13 @@ def route_to_vendor(method: str, *args, **kwargs):
         if vendor not in fallback_vendors:
             fallback_vendors.append(vendor)
 
+    # Build a human-readable summary of the call args for logging
+    arg_summary = ", ".join(
+        [str(a) for a in args] + [f"{k}={v}" for k, v in kwargs.items()]
+    )
+
     last_result = None
+    last_error = None
     for vendor in fallback_vendors:
         if vendor not in VENDOR_METHODS[method]:
             continue
@@ -181,13 +190,43 @@ def route_to_vendor(method: str, *args, **kwargs):
         try:
             result = impl_func(*args, **kwargs)
             if _is_empty_result(result) and vendor != fallback_vendors[-1]:
+                logger.info(
+                    "📊 API: %s(%s) → %s returned empty, trying next vendor",
+                    method, arg_summary, vendor,
+                )
                 last_result = result  # keep it in case all vendors are empty
                 continue
+            chars = len(result) if isinstance(result, str) else 0
+            logger.info(
+                "📊 API: %s(%s) → %s (%s chars)",
+                method, arg_summary, vendor, f"{chars:,}",
+            )
             return result
         except AlphaVantageRateLimitError:
+            logger.info(
+                "📊 API: %s(%s) → %s rate-limited, trying next vendor",
+                method, arg_summary, vendor,
+            )
+            continue
+        except Exception as exc:
+            # Vendor-level errors (missing API key, config issues, etc.)
+            # shouldn't crash the whole pipeline if other vendors can serve.
+            last_error = exc
+            logger.info(
+                "📊 API: %s(%s) → %s failed (%s), trying next vendor",
+                method, arg_summary, vendor, exc,
+            )
             continue
 
     # All vendors tried — return whatever the last one gave us.
     if last_result is not None:
+        chars = len(last_result) if isinstance(last_result, str) else 0
+        logger.warning(
+            "📊 API: %s(%s) → all vendors returned empty (%s chars)",
+            method, arg_summary, f"{chars:,}",
+        )
         return last_result
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"No available vendor for '{method}'")
     raise RuntimeError(f"No available vendor for '{method}'")

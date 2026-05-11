@@ -4,6 +4,7 @@ Exposes India VIX and FII/DII activity as tools that analysts can call.
 These are opt-in tools — only added when India config is active.
 """
 
+import logging
 from typing import Annotated
 
 from langchain_core.tools import tool
@@ -12,6 +13,8 @@ from tradingagents.dataflows.india_market_data import (
     get_fii_dii_activity,
     get_india_vix_data,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @tool
@@ -31,7 +34,12 @@ def get_india_vix(
     Returns:
         Markdown report with VIX values, trend, and interpretation.
     """
-    return get_india_vix_data(curr_date, look_back_days)
+    result = get_india_vix_data(curr_date, look_back_days)
+    logger.info(
+        "📊 API: get_india_vix(%s, look_back=%d) → %s chars",
+        curr_date, look_back_days, f"{len(result):,}",
+    )
+    return result
 
 
 @tool
@@ -53,4 +61,9 @@ def get_fii_dii(
     Returns:
         Markdown report with buy/sell/net values and interpretation guide.
     """
-    return get_fii_dii_activity(curr_date, look_back_days)
+    result = get_fii_dii_activity(curr_date, look_back_days)
+    logger.info(
+        "📊 API: get_fii_dii(%s, look_back=%d) → %s chars",
+        curr_date, look_back_days, f"{len(result):,}",
+    )
+    return result
