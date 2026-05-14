@@ -48,6 +48,8 @@ _DEFAULTS: dict[str, Any] = {
         "deep_think_model": "qwen3:32b",
         "quick_think_model": "qwen3:14b",
         "backend_url": "",
+        "quick_backend_url": "",
+        "deep_backend_url": "",
         "google_thinking_level": "",
         "openai_reasoning_effort": "",
         "anthropic_effort": "",
@@ -177,6 +179,18 @@ class TradingConfig:
     def backend_url(self) -> Optional[str]:
         v = self._raw["llm"]["backend_url"]
         return v if v else None
+
+    @property
+    def quick_backend_url(self) -> Optional[str]:
+        """Per-model URL for quick thinker; falls back to backend_url."""
+        v = self._raw["llm"]["quick_backend_url"]
+        return v if v else self.backend_url
+
+    @property
+    def deep_backend_url(self) -> Optional[str]:
+        """Per-model URL for deep thinker; falls back to backend_url."""
+        v = self._raw["llm"]["deep_backend_url"]
+        return v if v else self.backend_url
 
     # ── Market ───────────────────────────────────────────────────────
 
@@ -327,6 +341,8 @@ class TradingConfig:
             "deep_think_llm": self.deep_think_model,
             "quick_think_llm": self.quick_think_model,
             "backend_url": self.backend_url,
+            "quick_backend_url": self.quick_backend_url,
+            "deep_backend_url": self.deep_backend_url,
             "google_thinking_level": (
                 self._raw["llm"]["google_thinking_level"] or None
             ),

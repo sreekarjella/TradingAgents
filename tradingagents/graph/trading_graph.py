@@ -87,13 +87,13 @@ class TradingAgentsGraph:
         deep_client = create_llm_client(
             provider=self.config["llm_provider"],
             model=self.config["deep_think_llm"],
-            base_url=self.config.get("backend_url"),
+            base_url=self.config.get("deep_backend_url") or self.config.get("backend_url"),
             **llm_kwargs,
         )
         quick_client = create_llm_client(
             provider=self.config["llm_provider"],
             model=self.config["quick_think_llm"],
-            base_url=self.config.get("backend_url"),
+            base_url=self.config.get("quick_backend_url") or self.config.get("backend_url"),
             **llm_kwargs,
         )
 

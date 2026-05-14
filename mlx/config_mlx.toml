@@ -1,0 +1,24 @@
+# ─────────────────────────────────────────────────────────────────────────
+# MLX Configuration Profile
+#
+# Copy these values into your config.toml [llm] section to switch from
+# Ollama to MLX. Only the LLM section changes — everything else stays.
+#
+# Prerequisites:
+#   1. Download models:   ./mlx/download.sh
+#   2. Start servers:     ./mlx/start.sh
+#   3. Update config.toml with the values below
+#   4. Run pipeline:      python -m tradingagents.trading.daily_runner
+#
+# To switch back to Ollama:
+#   1. Stop MLX servers:  ./mlx/stop.sh
+#   2. Restore provider = "ollama" and clear the backend URLs
+# ─────────────────────────────────────────────────────────────────────────
+
+[llm]
+provider = "mlx"
+deep_think_model = "mlx-community/Qwen3-32B-4bit"
+quick_think_model = "mlx-community/Qwen3-14B-4bit"
+backend_url = ""
+quick_backend_url = "http://localhost:8081/v1"
+deep_backend_url = "http://localhost:8082/v1"
