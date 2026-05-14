@@ -766,6 +766,11 @@ class TestLegacyRemoval:
         mock_graph._run_graph = functools.partial(
             TradingAgentsGraph._run_graph, mock_graph
         )
+        # Bind real _propagate_once too — it's the function that actually
+        # delegates into _run_graph after the retry-on-corruption guard.
+        mock_graph._propagate_once = functools.partial(
+            TradingAgentsGraph._propagate_once, mock_graph
+        )
         TradingAgentsGraph.propagate(mock_graph, "NVDA", "2026-01-10")
         entries = mock_graph.memory_log.load_entries()
         assert len(entries) == 1

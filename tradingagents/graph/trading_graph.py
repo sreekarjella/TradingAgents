@@ -286,7 +286,39 @@ class TradingAgentsGraph:
         When ``checkpoint_enabled`` is set in config, the graph is recompiled
         with a per-ticker SqliteSaver so a crashed run can resume from the last
         successful node on a subsequent invocation with the same ticker+date.
+
+        If the checkpoint is corrupt at execution time (langgraph version drift
+        or non-JSON-serialisable metadata that slipped past the SafeSqliteSaver),
+        we clear it and retry once from scratch with no checkpointer attached.
         """
+        try:
+            return self._propagate_once(company_name, trade_date)
+        except (KeyError, TypeError) as exc:
+            # Known checkpoint-corruption signatures — see logs for examples.
+            corrupt_signatures = (
+                "pending_sends",
+                "is not JSON serializable",
+            )
+            if not any(sig in str(exc) for sig in corrupt_signatures):
+                raise
+            logger.warning(
+                "Checkpoint corruption detected for %s on %s (%s); clearing and retrying without checkpointer",
+                company_name, trade_date, exc,
+            )
+            if self.config.get("checkpoint_enabled"):
+                clear_checkpoint(
+                    self.config["data_cache_dir"], company_name, str(trade_date)
+                )
+            # One-shot retry with checkpointing disabled so we always make forward progress.
+            original_flag = self.config.get("checkpoint_enabled")
+            self.config["checkpoint_enabled"] = False
+            try:
+                return self._propagate_once(company_name, trade_date)
+            finally:
+                self.config["checkpoint_enabled"] = original_flag
+
+    def _propagate_once(self, company_name, trade_date):
+        """Single attempt at running the graph. See :meth:`propagate` for retry logic."""
         self.ticker = company_name
 
         # Resolve any pending memory-log entries for this ticker before the pipeline runs.
