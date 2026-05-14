@@ -136,19 +136,30 @@ _SAMPLE_RSS = b"""<?xml version="1.0" encoding="UTF-8"?>
 </rss>"""
 
 
-def _mock_urlopen(req, timeout=10):
-    """Return a mock response that yields our sample RSS."""
+def _mock_requests_get(url, headers=None, timeout=10):
+    """Return a mock ``requests.Response`` that yields our sample RSS."""
     mock_resp = MagicMock()
-    mock_resp.read.return_value = _SAMPLE_RSS
-    mock_resp.__enter__ = lambda s: s
-    mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.content = _SAMPLE_RSS
+    mock_resp.text = _SAMPLE_RSS.decode("utf-8")
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status = MagicMock(return_value=None)
     return mock_resp
+
+
+# `india_news` caches failed domains in a module-level set, so clear it
+# between tests to avoid one test's failure poisoning subsequent runs.
+@pytest.fixture(autouse=True)
+def _reset_failed_domains():
+    from tradingagents.dataflows import india_news as _mod
+    _mod._failed_domains.clear()
+    yield
+    _mod._failed_domains.clear()
 
 
 @pytest.mark.unit
 class TestFetchEntries:
-    @patch("tradingagents.dataflows.india_news.urlopen", side_effect=_mock_urlopen)
-    def test_date_filtering(self, mock_open):
+    @patch("tradingagents.dataflows.india_news.requests.get", side_effect=_mock_requests_get)
+    def test_date_filtering(self, mock_get):
         start = datetime(2026, 5, 1)
         end = datetime(2026, 5, 9)
         entries = _fetch_entries(["https://economictimes.indiatimes.com/feed"], start, end)
@@ -157,8 +168,8 @@ class TestFetchEntries:
         assert "India GDP growth accelerates" in titles
         assert "Old article from 2024" not in titles
 
-    @patch("tradingagents.dataflows.india_news.urlopen", side_effect=_mock_urlopen)
-    def test_deduplication(self, mock_open):
+    @patch("tradingagents.dataflows.india_news.requests.get", side_effect=_mock_requests_get)
+    def test_deduplication(self, mock_get):
         start = datetime(2026, 5, 1)
         end = datetime(2026, 5, 9)
         # Same feed URL twice — should still deduplicate
@@ -169,23 +180,26 @@ class TestFetchEntries:
         titles = [e["title"] for e in entries]
         assert titles.count("Reliance posts record Q4 profit") == 1
 
-    @patch("tradingagents.dataflows.india_news.urlopen", side_effect=Exception("DNS fail"))
-    def test_handles_network_error(self, mock_open):
+    @patch(
+        "tradingagents.dataflows.india_news.requests.get",
+        side_effect=__import__("requests").exceptions.ConnectionError("DNS fail"),
+    )
+    def test_handles_network_error(self, mock_get):
         entries = _fetch_entries(["https://bad.url"], datetime(2026, 5, 1), datetime(2026, 5, 9))
         assert entries == []
 
 
 @pytest.mark.unit
 class TestGetNewsIndiaRSS:
-    @patch("tradingagents.dataflows.india_news.urlopen", side_effect=_mock_urlopen)
-    def test_finds_ticker_news(self, mock_open):
+    @patch("tradingagents.dataflows.india_news.requests.get", side_effect=_mock_requests_get)
+    def test_finds_ticker_news(self, mock_get):
         result = get_news_india_rss("RELIANCE.NS", "2026-05-01", "2026-05-09")
         assert "RELIANCE.NS" in result
         assert "Reliance posts record Q4 profit" in result
         assert "India GDP growth accelerates" not in result  # not about Reliance
 
-    @patch("tradingagents.dataflows.india_news.urlopen", side_effect=_mock_urlopen)
-    def test_no_match(self, mock_open):
+    @patch("tradingagents.dataflows.india_news.requests.get", side_effect=_mock_requests_get)
+    def test_no_match(self, mock_get):
         result = get_news_india_rss("WIPRO.NS", "2026-05-01", "2026-05-09")
         assert "No Indian news found for WIPRO.NS" in result
 
@@ -196,14 +210,14 @@ class TestGetNewsIndiaRSS:
 
 @pytest.mark.unit
 class TestGetGlobalNewsIndiaRSS:
-    @patch("tradingagents.dataflows.india_news.urlopen", side_effect=_mock_urlopen)
-    def test_returns_articles(self, mock_open):
+    @patch("tradingagents.dataflows.india_news.requests.get", side_effect=_mock_requests_get)
+    def test_returns_articles(self, mock_get):
         result = get_global_news_india_rss("2026-05-09", look_back_days=14, limit=10)
         assert "India Market & Economy News" in result
         assert "India GDP growth accelerates" in result
 
-    @patch("tradingagents.dataflows.india_news.urlopen", side_effect=_mock_urlopen)
-    def test_respects_limit(self, mock_open):
+    @patch("tradingagents.dataflows.india_news.requests.get", side_effect=_mock_requests_get)
+    def test_respects_limit(self, mock_get):
         result = get_global_news_india_rss("2026-05-09", look_back_days=14, limit=1)
         # Only 1 article should show (the most recent one)
         assert result.count("### ") == 1

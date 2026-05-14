@@ -118,6 +118,7 @@ _PROVIDER_CONFIG = {
     "glm": ("https://api.z.ai/api/paas/v4/", "ZHIPU_API_KEY"),
     "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
     "ollama": ("http://localhost:11434/v1", None),
+    "mlx": ("http://localhost:8081/v1", None),
 }
 
 
@@ -156,8 +157,8 @@ class OpenAIClient(BaseLLMClient):
                 if api_key:
                     llm_kwargs["api_key"] = api_key
             else:
-                # Ollama: use dummy key and a direct (no-proxy) httpx client
-                # so Walmart proxy doesn't intercept localhost traffic.
+                # Ollama / MLX: use dummy key and a direct (no-proxy) httpx
+                # client so Walmart proxy doesn't intercept localhost traffic.
                 llm_kwargs["api_key"] = "ollama"
                 llm_kwargs["http_client"] = httpx.Client(
                     proxy=None, verify=False,
@@ -175,6 +176,17 @@ class OpenAIClient(BaseLLMClient):
         # all model families. Third-party providers use Chat Completions.
         if self.provider == "openai":
             llm_kwargs["use_responses_api"] = True
+
+        # MLX + Qwen3 quirk: thinking mode emits the answer into a separate
+        # ``reasoning`` field that LangChain ignores, leaving ``content``
+        # empty (or truncated when max_tokens runs out mid-thought). Agents
+        # then save blank reports. Disable thinking via the chat template
+        # so the model writes directly into ``content``. Users that want
+        # thinking back can override via ``model_kwargs.extra_body``.
+        if self.provider == "mlx" and "extra_body" not in self.kwargs:
+            llm_kwargs["extra_body"] = {
+                "chat_template_kwargs": {"enable_thinking": False}
+            }
 
         # DeepSeek's thinking-mode quirks live in their own subclass so the
         # base NormalizedChatOpenAI stays free of provider-specific branches.
