@@ -7,7 +7,6 @@ Imported and mounted in app.py via ``app.include_router(router)``.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse

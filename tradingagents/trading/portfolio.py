@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Optional
 
-from .broker import BrokerInterface, PortfolioSnapshot
+from .broker import BrokerInterface
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +32,8 @@ def portfolio_report(broker: BrokerInterface, benchmark_name: str = "NIFTY 50") 
 
     # Summary
     report += "### Summary\n"
-    report += f"| Metric | Value |\n"
-    report += f"|--------|-------|\n"
+    report += "| Metric | Value |\n"
+    report += "|--------|-------|\n"
     report += f"| Cash | ₹{portfolio.cash:,.2f} |\n"
     report += f"| Holdings Value | ₹{portfolio.holdings_value:,.2f} |\n"
     report += f"| **Total Value** | **₹{portfolio.total_value:,.2f}** |\n"

@@ -13,7 +13,7 @@ from __future__ import annotations
 import random
 import sqlite3
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent

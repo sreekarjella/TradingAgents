@@ -1,10 +1,10 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
-    get_indicators,
     get_language_instruction,
-    get_stock_data,
 )
+from tradingagents.agents.utils.core_stock_tools import get_stock_data
+from tradingagents.agents.utils.technical_indicators_tools import get_indicators
 from tradingagents.dataflows.config import is_india_market as _is_india_market
 
 
