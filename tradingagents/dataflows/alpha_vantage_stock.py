@@ -1,5 +1,7 @@
 from datetime import datetime
-from .alpha_vantage_common import _make_api_request, _filter_csv_by_date_range
+from .alpha_vantage_common import (
+    _make_api_request, _filter_csv_by_date_range, normalize_indian_symbol,
+)
 
 def get_stock(
     symbol: str,
@@ -18,6 +20,8 @@ def get_stock(
     Returns:
         CSV string containing the daily adjusted time series data filtered to the date range.
     """
+    # Indian tickers (.NS / .BO) are listed on Alpha Vantage as .BSE
+    symbol = normalize_indian_symbol(symbol)
     # Parse dates to determine the range
     start_dt = datetime.strptime(start_date, "%Y-%m-%d")
     today = datetime.now()

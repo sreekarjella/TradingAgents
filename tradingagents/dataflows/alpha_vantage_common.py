@@ -7,6 +7,40 @@ from io import StringIO
 
 API_BASE_URL = "https://www.alphavantage.co/query"
 
+# Endpoints with confirmed Indian (BSE) coverage. Equity time-series and
+# technical indicators work for ``<TICKER>.BSE``; fundamentals, news and
+# insider transactions are essentially US-only on the free tier and will
+# return blank / "no data" responses when called with .BSE symbols.
+_INDIAN_SUPPORTED_FUNCTIONS = {
+    "TIME_SERIES_DAILY_ADJUSTED", "TIME_SERIES_DAILY",
+    "TIME_SERIES_WEEKLY", "TIME_SERIES_MONTHLY",
+    "SMA", "EMA", "WMA", "DEMA", "TEMA", "TRIMA", "KAMA", "MAMA",
+    "VWAP", "T3", "MACD", "MACDEXT", "STOCH", "STOCHF", "RSI",
+    "STOCHRSI", "WILLR", "ADX", "ADXR", "APO", "PPO", "MOM", "BOP",
+    "CCI", "CMO", "ROC", "ROCR", "AROON", "AROONOSC", "MFI", "TRIX",
+    "ULTOSC", "DX", "MINUS_DI", "PLUS_DI", "MINUS_DM", "PLUS_DM",
+    "BBANDS", "MIDPOINT", "MIDPRICE", "SAR", "TRANGE", "ATR", "NATR",
+    "AD", "ADOSC", "OBV", "HT_TRENDLINE", "HT_SINE", "HT_TRENDMODE",
+    "HT_DCPERIOD", "HT_DCPHASE", "HT_PHASOR",
+}
+
+
+def normalize_indian_symbol(symbol: str) -> str:
+    """Convert a yfinance-style Indian ticker to Alpha Vantage's BSE format.
+
+    yfinance uses ``RELIANCE.NS`` (NSE) or ``RELIANCE.BO`` (BSE).
+    Alpha Vantage uses ``RELIANCE.BSE`` for both — they share the same
+    underlying listing on the Bombay exchange. Non-Indian symbols pass
+    through untouched so the helper is safe to call unconditionally.
+    """
+    if not isinstance(symbol, str):
+        return symbol
+    upper = symbol.upper()
+    for suffix in (".NS", ".BO", ".NSE"):
+        if upper.endswith(suffix):
+            return symbol[: -len(suffix)] + ".BSE"
+    return symbol
+
 def get_api_key() -> str:
     """Retrieve the API key for Alpha Vantage from environment variables."""
     api_key = os.getenv("ALPHA_VANTAGE_API_KEY")

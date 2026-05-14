@@ -1,4 +1,4 @@
-from .alpha_vantage_common import _make_api_request
+from .alpha_vantage_common import _make_api_request, normalize_indian_symbol
 
 def get_indicator(
     symbol: str,
@@ -61,6 +61,9 @@ def get_indicator(
         raise ValueError(
             f"Indicator {indicator} is not supported. Please choose from: {list(supported_indicators.keys())}"
         )
+
+    # Indian tickers (.NS / .BO) are listed on Alpha Vantage as .BSE
+    symbol = normalize_indian_symbol(symbol)
 
     curr_date_dt = datetime.strptime(curr_date, "%Y-%m-%d")
     before = curr_date_dt - relativedelta(days=look_back_days)

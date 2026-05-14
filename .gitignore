@@ -221,3 +221,4 @@ __marimo__/
 -e 
 # Paper trading database
 data/
+mlx/logs/
