@@ -344,10 +344,17 @@ def _log_daily_summary(report: DailyReport) -> None:
 # ── CLI entry point ──────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    import os
     import sys
 
     from dotenv import load_dotenv
     load_dotenv()
+
+    # Tell langchain-openai to skip its TCP-keepalive httpx-transport injection.
+    # That injection silently disables HTTP_PROXY auto-detection AND emits a
+    # multi-line warning on every run; we don't need its keepalive tweaks for
+    # local Ollama and our own configure_network() handles proxy already.
+    os.environ.setdefault("LANGCHAIN_OPENAI_TCP_KEEPALIVE", "0")
 
     from tradingagents.network import configure_network
     configure_network()

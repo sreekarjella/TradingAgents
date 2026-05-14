@@ -40,6 +40,11 @@ _NSE_FII_DII_URL = f"{_NSE_BASE}/api/fiidiiTradeReact"
 _NSE_TIMEOUT = 15
 _MAX_RETRIES = 3
 _RETRY_BASE_DELAY = 2.0
+# After this many consecutive cookie-warmup failures across all calls in a
+# process, stop trying NSE for the rest of the run. Set high enough that a
+# transient network blip doesn't poison a healthy session, low enough that
+# a hard-blocked corporate network bails after one painful round of retries.
+_CIRCUIT_OPEN_AFTER = 3
 
 # yfinance ticker variants to try for India VIX (some break periodically)
 _VIX_TICKERS = ["^INDIAVIX", "INDIAVIX.NS", "NIFVIX.NS"]
@@ -66,6 +71,13 @@ class _NseClient:
     def __init__(self) -> None:
         self._session = None
         self._cookies_warmed = False
+        # Circuit breaker: once warmup has failed enough times in a row,
+        # stop trying for the rest of the process lifetime. NSE is hard-
+        # blocked from corporate networks (Walmart, banks, etc.) and the
+        # 2s→4s→8s exponential-backoff retries waste ~14s per call × multiple
+        # call sites = a meaningful chunk of every dry run.
+        self._consecutive_warmup_failures = 0
+        self._circuit_open = False
 
     def _ensure_session(self):
         """Lazily create the curl_cffi session."""
@@ -119,18 +131,38 @@ class _NseClient:
             path: Full URL or path starting with ``/api/...``.
 
         Returns:
-            Parsed JSON (dict or list), or None on failure.
+            Parsed JSON (dict or list), or None on failure (including
+            when the circuit breaker is open from prior failures).
         """
+        # Circuit breaker fast-path: bail immediately on permanently-blocked
+        # networks instead of burning ~14s per call on doomed retries.
+        if self._circuit_open:
+            return None
+
         url = path if path.startswith("http") else f"{_NSE_BASE}{path}"
 
         for attempt in range(_MAX_RETRIES):
             if not self._warm_cookies():
                 # Cookies failed — reset session and retry
                 self._reset()
+                self._consecutive_warmup_failures += 1
+                if self._consecutive_warmup_failures >= _CIRCUIT_OPEN_AFTER:
+                    self._circuit_open = True
+                    logger.info(
+                        "NSE circuit breaker tripped after %d failed warmups "
+                        "— NSE direct API disabled for this session (typical "
+                        "on corporate networks).",
+                        self._consecutive_warmup_failures,
+                    )
+                    return None
                 delay = _RETRY_BASE_DELAY * (2 ** attempt)
                 logger.info("NSE cookie warmup failed, retrying in %.0fs", delay)
                 time.sleep(delay)
                 continue
+
+            # Warmup succeeded — reset the failure counter so a transient
+            # network blip doesn't slowly trip the breaker.
+            self._consecutive_warmup_failures = 0
 
             try:
                 resp = self._session.get(url, timeout=_NSE_TIMEOUT)

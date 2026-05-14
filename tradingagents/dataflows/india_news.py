@@ -153,7 +153,14 @@ def _fetch_entries(
                 })
         except (ReqConnectionError, ProxyError) as exc:
             _failed_domains.add(domain)
-            logger.warning("RSS feed blocked (%s) — will skip for this session: %s", _source_label(url), exc)
+            # Truncate the exception — the full ProxyError trace is ~300 chars
+            # of nested wrappers that don't tell the user anything new beyond
+            # "this domain is blocked". Cap at 80 chars for log hygiene.
+            short_reason = str(exc).split("(Caused")[0].strip()[:80]
+            logger.warning(
+                "RSS feed blocked (%s) — will skip for this session: %s",
+                _source_label(url), short_reason,
+            )
         except requests.RequestException as exc:
             logger.warning("RSS feed unavailable (%s): %s", _source_label(url), exc)
         except Exception:
