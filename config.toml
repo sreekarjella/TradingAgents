@@ -20,16 +20,16 @@
 # The AI "brain" that powers the analysts, debate, and portfolio manager.
 
 [llm]
-provider = "mlx"                   # Options: ollama, openai, anthropic, google, xai, deepseek, qwen, openrouter, azure, mlx
-deep_think_model = "mlx-community/Qwen3-32B-4bit"     # Used for: Research debate, Portfolio Manager decision (slower, smarter)
-quick_think_model = "mlx-community/Qwen3-14B-4bit"    # Used for: Analysts, tool calls, risk discussion (faster, lighter)
+provider = "ollama"               # Options: ollama, openai, anthropic, google, xai, deepseek, qwen, openrouter, azure, mlx
+deep_think_model = "qwen3:32b-q8_0"      # Used for: Research debate, Portfolio Manager decision (slower, smarter, Q8 for max quality)
+quick_think_model = "qwen3:14b-q8_0"     # Used for: Analysts, tool calls, risk discussion (faster, lighter, Q8 for max quality)
 backend_url = ""                   # Leave empty for auto-detect. Override for custom endpoint (e.g. "http://localhost:11434/v1")
 
 # Per-model backend URLs (optional — set these when quick & deep models run on different servers)
 # Useful for MLX (each model runs its own server) or load-balanced deployments.
 # If set, these override backend_url for the respective model tier.
-quick_backend_url = "http://localhost:8081/v1"    # MLX quick model server
-deep_backend_url = "http://localhost:8082/v1"     # MLX deep model server
+quick_backend_url = ""             # Leave empty for Ollama (single server handles both via auto-swap)
+deep_backend_url = ""              # Leave empty for Ollama (single server handles both via auto-swap)
 
 # Provider-specific tuning (leave empty to use provider defaults)
 google_thinking_level = ""         # Options: high, minimal

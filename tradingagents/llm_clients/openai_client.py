@@ -10,7 +10,7 @@ from .validators import validate_model
 
 
 class NormalizedChatOpenAI(ChatOpenAI):
-    """ChatOpenAI with normalized content output.
+    """ChatOpenAI with normalized content output and thinking-mode safety net.
 
     The Responses API returns content as a list of typed blocks
     (reasoning, text, etc.). ``invoke`` normalizes to string for
@@ -20,8 +20,22 @@ class NormalizedChatOpenAI(ChatOpenAI):
     PydanticSerializationUnexpectedValue warnings per call without
     affecting correctness).
 
-    Provider-specific quirks (e.g. DeepSeek's thinking mode) live in
-    purpose-built subclasses below so this base class stays small.
+    Both MLX (mlx_lm.server) and Ollama, when serving Qwen3 with
+    ``chat_template_kwargs.enable_thinking=true``, return the model's
+    chain-of-thought in a separate ``reasoning`` field on the assistant
+    message. LangChain's ChatOpenAI silently drops it. When the model
+    burns its entire token budget on thinking and never gets to write a
+    final answer, the AIMessage comes back with empty ``content`` and
+    the agent persists a blank report — the bug that wiped the
+    2026-05-13 run. ``_create_chat_result`` below is the safety net:
+    capture ``reasoning`` into ``additional_kwargs`` for inspection,
+    and if ``content`` is empty, promote the reasoning to be the content
+    so we never save blank reports. The override is a no-op for
+    providers/models that don't emit a ``reasoning`` field.
+
+    Provider-specific quirks (e.g. DeepSeek's reasoning_content
+    round-trip) live in purpose-built subclasses below so this base
+    class stays small.
     """
 
     def invoke(self, input, config=None, **kwargs):
@@ -31,6 +45,34 @@ class NormalizedChatOpenAI(ChatOpenAI):
         if method is None:
             method = "function_calling"
         return super().with_structured_output(schema, method=method, **kwargs)
+
+    def _create_chat_result(self, response, generation_info=None):
+        chat_result = super()._create_chat_result(response, generation_info)
+        response_dict = (
+            response
+            if isinstance(response, dict)
+            else response.model_dump(
+                exclude={"choices": {"__all__": {"message": {"parsed"}}}}
+            )
+        )
+        for generation, choice in zip(
+            chat_result.generations, response_dict.get("choices", [])
+        ):
+            reasoning = (choice.get("message") or {}).get("reasoning")
+            if not reasoning:
+                continue
+            generation.message.additional_kwargs["reasoning_content"] = reasoning
+            content = generation.message.content
+            content_text = (
+                content if isinstance(content, str)
+                else "".join(
+                    c.get("text", "") for c in (content or [])
+                    if isinstance(c, dict)
+                )
+            )
+            if not (content_text or "").strip():
+                generation.message.content = reasoning.strip()
+        return chat_result
 
 
 def _input_to_messages(input_: Any) -> list:
@@ -104,11 +146,22 @@ class DeepSeekChatOpenAI(NormalizedChatOpenAI):
             )
         return super().with_structured_output(schema, method=method, **kwargs)
 
+
 # Kwargs forwarded from user config to ChatOpenAI
 _PASSTHROUGH_KWARGS = (
-    "timeout", "max_retries", "reasoning_effort",
+    "timeout", "max_retries", "reasoning_effort", "max_tokens", "extra_body",
     "api_key", "callbacks", "http_client", "http_async_client",
 )
+
+# Default token budget for Qwen3 thinking models served via MLX or Ollama.
+# Qwen3's chain-of-thought routinely uses 1–4K tokens before producing the
+# final answer, and the analyst/debate prompts then need another 1–2K for
+# the report itself. The OpenAI client's default cap of 4096 truncates
+# thinking mid-stream and leaves ``content`` empty (only ``reasoning``
+# populated, which LangChain drops). 8K gives thinking room to breathe
+# with a safety margin.
+_QWEN3_THINKING_MAX_TOKENS = 8192
+_MLX_DEFAULT_MAX_TOKENS = 8192
 
 # Provider base URLs and API key env vars
 _PROVIDER_CONFIG = {
@@ -177,19 +230,34 @@ class OpenAIClient(BaseLLMClient):
         if self.provider == "openai":
             llm_kwargs["use_responses_api"] = True
 
-        # MLX + Qwen3 quirk: thinking mode emits the answer into a separate
-        # ``reasoning`` field that LangChain ignores, leaving ``content``
-        # empty (or truncated when max_tokens runs out mid-thought). Agents
-        # then save blank reports. Disable thinking via the chat template
-        # so the model writes directly into ``content``. Users that want
-        # thinking back can override via ``model_kwargs.extra_body``.
-        if self.provider == "mlx" and "extra_body" not in self.kwargs:
-            llm_kwargs["extra_body"] = {
-                "chat_template_kwargs": {"enable_thinking": False}
-            }
+        # Qwen3 thinking-mode (MLX or Ollama): keep thinking ENABLED for
+        # reasoning quality, and make sure the model has enough tokens to
+        # finish thinking AND write the answer. Both mlx_lm.server and
+        # Ollama's OpenAI-compat endpoint return thinking output in a
+        # separate ``reasoning`` field; if max_tokens runs out mid-thought
+        # the final answer ends up in ``reasoning`` and ``content`` comes
+        # back empty (LangChain drops the reasoning field). The base
+        # NormalizedChatOpenAI safety net catches this, but the *primary*
+        # fix is just giving thinking enough room to finish. Note: Ollama
+        # requires us to opt in to thinking via chat_template_kwargs;
+        # without it Ollama strips thinking server-side.
+        is_qwen3_local = (
+            self.provider in ("mlx", "ollama")
+            and "qwen3" in self.model.lower()
+        )
+        if is_qwen3_local:
+            llm_kwargs.setdefault("max_tokens", _QWEN3_THINKING_MAX_TOKENS)
+            if "extra_body" not in self.kwargs:
+                llm_kwargs["extra_body"] = {
+                    "chat_template_kwargs": {"enable_thinking": True}
+                }
+            # Users can override extra_body via model_kwargs to disable
+            # thinking for a specific run (e.g. latency-sensitive tests).
 
-        # DeepSeek's thinking-mode quirks live in their own subclass so the
-        # base NormalizedChatOpenAI stays free of provider-specific branches.
+        # DeepSeek's thinking-mode quirks (reasoning_content round-trip)
+        # live in their own subclass; everything else uses the base class
+        # which already handles the generic ``reasoning`` field via the
+        # safety net in NormalizedChatOpenAI._create_chat_result.
         chat_cls = DeepSeekChatOpenAI if self.provider == "deepseek" else NormalizedChatOpenAI
         return chat_cls(**llm_kwargs)
 
