@@ -20,14 +20,13 @@
 # The AI "brain" that powers the analysts, debate, and portfolio manager.
 
 [llm]
-provider = "ollama"               # Options: ollama, openai, anthropic, google, xai, deepseek, qwen, openrouter, azure, mlx
+provider = "ollama"               # Options: ollama, openai, anthropic, google, xai, deepseek, qwen, openrouter, azure
 deep_think_model = "qwen3:32b"           # Q4 32B + thinking ON (set in trading_graph.py). Q8 was swap-thrashing on 48GB RAM.
 quick_think_model = "qwen3:14b"          # Q4 14B + thinking OFF for speed. Combined: 29GB RAM — fits comfortably.
 backend_url = ""                   # Leave empty for auto-detect. Override for custom endpoint (e.g. "http://localhost:11434/v1")
 
-# Per-model backend URLs (optional — set these when quick & deep models run on different servers)
-# Useful for MLX (each model runs its own server) or load-balanced deployments.
-# If set, these override backend_url for the respective model tier.
+# Per-model backend URLs (optional — set these when quick & deep models run on different servers).
+# Useful for load-balanced deployments. If set, these override backend_url for the respective model tier.
 quick_backend_url = ""             # Leave empty for Ollama (single server handles both via auto-swap)
 deep_backend_url = ""              # Leave empty for Ollama (single server handles both via auto-swap)
 

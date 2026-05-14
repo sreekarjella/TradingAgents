@@ -20,8 +20,8 @@ class NormalizedChatOpenAI(ChatOpenAI):
     PydanticSerializationUnexpectedValue warnings per call without
     affecting correctness).
 
-    Both MLX (mlx_lm.server) and Ollama, when serving Qwen3 with
-    ``chat_template_kwargs.enable_thinking=true``, return the model's
+    Ollama, when serving Qwen3 with
+    ``chat_template_kwargs.enable_thinking=true``, returns the model's
     chain-of-thought in a separate ``reasoning`` field on the assistant
     message. LangChain's ChatOpenAI silently drops it. When the model
     burns its entire token budget on thinking and never gets to write a
@@ -153,7 +153,7 @@ _PASSTHROUGH_KWARGS = (
     "api_key", "callbacks", "http_client", "http_async_client",
 )
 
-# Default token budget for Qwen3 thinking models served via MLX or Ollama.
+# Default token budget for Qwen3 thinking models served via Ollama.
 # Qwen3's chain-of-thought routinely uses 1–4K tokens before producing the
 # final answer, and the analyst/debate prompts then need another 1–2K for
 # the report itself. The OpenAI client's default cap of 4096 truncates
@@ -161,7 +161,6 @@ _PASSTHROUGH_KWARGS = (
 # populated, which LangChain drops). 8K gives thinking room to breathe
 # with a safety margin.
 _QWEN3_THINKING_MAX_TOKENS = 8192
-_MLX_DEFAULT_MAX_TOKENS = 8192
 
 # Provider base URLs and API key env vars
 _PROVIDER_CONFIG = {
@@ -171,7 +170,6 @@ _PROVIDER_CONFIG = {
     "glm": ("https://api.z.ai/api/paas/v4/", "ZHIPU_API_KEY"),
     "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
     "ollama": ("http://localhost:11434/v1", None),
-    "mlx": ("http://localhost:8081/v1", None),
 }
 
 
@@ -210,7 +208,7 @@ class OpenAIClient(BaseLLMClient):
                 if api_key:
                     llm_kwargs["api_key"] = api_key
             else:
-                # Ollama / MLX: use dummy key and a direct (no-proxy) httpx
+                # Ollama: use dummy key and a direct (no-proxy) httpx
                 # client so Walmart proxy doesn't intercept localhost traffic.
                 llm_kwargs["api_key"] = "ollama"
                 llm_kwargs["http_client"] = httpx.Client(
@@ -230,19 +228,19 @@ class OpenAIClient(BaseLLMClient):
         if self.provider == "openai":
             llm_kwargs["use_responses_api"] = True
 
-        # Qwen3 thinking-mode (MLX or Ollama): keep thinking ENABLED for
+        # Qwen3 thinking-mode (Ollama): keep thinking ENABLED for
         # reasoning quality, and make sure the model has enough tokens to
-        # finish thinking AND write the answer. Both mlx_lm.server and
-        # Ollama's OpenAI-compat endpoint return thinking output in a
-        # separate ``reasoning`` field; if max_tokens runs out mid-thought
-        # the final answer ends up in ``reasoning`` and ``content`` comes
-        # back empty (LangChain drops the reasoning field). The base
-        # NormalizedChatOpenAI safety net catches this, but the *primary*
-        # fix is just giving thinking enough room to finish. Note: Ollama
-        # requires us to opt in to thinking via chat_template_kwargs;
-        # without it Ollama strips thinking server-side.
+        # finish thinking AND write the answer. Ollama's OpenAI-compat
+        # endpoint returns thinking output in a separate ``reasoning``
+        # field; if max_tokens runs out mid-thought the final answer ends
+        # up in ``reasoning`` and ``content`` comes back empty (LangChain
+        # drops the reasoning field). The base NormalizedChatOpenAI safety
+        # net catches this, but the *primary* fix is just giving thinking
+        # enough room to finish. Note: Ollama requires us to opt in to
+        # thinking via chat_template_kwargs; without it Ollama strips
+        # thinking server-side.
         is_qwen3_local = (
-            self.provider in ("mlx", "ollama")
+            self.provider == "ollama"
             and "qwen3" in self.model.lower()
         )
         if is_qwen3_local:

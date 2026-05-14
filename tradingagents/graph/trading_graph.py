@@ -97,11 +97,11 @@ class TradingAgentsGraph:
         # marginal quality gain on largely mechanical work. Thinking stays
         # ON for the deep model where it actually shifts research-debate
         # and final-decision quality. The OpenAIClient factory only injects
-        # this override for Qwen3-on-MLX-or-Ollama — other providers ignore
-        # it harmlessly.
+        # this override for Qwen3-on-Ollama — other providers ignore it
+        # harmlessly.
         quick_kwargs = dict(llm_kwargs)
         if (
-            self.config["llm_provider"] in ("mlx", "ollama")
+            self.config["llm_provider"] == "ollama"
             and "qwen3" in self.config["quick_think_llm"].lower()
         ):
             quick_kwargs["extra_body"] = {

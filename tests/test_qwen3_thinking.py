@@ -1,13 +1,11 @@
 """Tests for thinking-mode safety net in NormalizedChatOpenAI.
 
-Both MLX (mlx_lm.server) and Ollama, when serving Qwen3 with
-``chat_template_kwargs.enable_thinking=true``, return the model's
-chain-of-thought in a separate ``reasoning`` field on the assistant
-message. LangChain's ChatOpenAI silently drops it. When the model
-burns its entire token budget on thinking and never gets to write a
-final answer, the AIMessage comes back with empty ``content`` and
-the agent persists a blank report — exactly what wiped the
-2026-05-13 run.
+Ollama, when serving Qwen3 with ``chat_template_kwargs.enable_thinking=true``,
+returns the model's chain-of-thought in a separate ``reasoning`` field on
+the assistant message. LangChain's ChatOpenAI silently drops it. When the
+model burns its entire token budget on thinking and never gets to write a
+final answer, the AIMessage comes back with empty ``content`` and the
+agent persists a blank report — exactly what wiped the 2026-05-13 run.
 
 Two pieces verified:
 
@@ -17,7 +15,7 @@ Two pieces verified:
    reasoning is promoted to be the content (last-resort safety net so
    agents never save blank reports).
 
-Plus: the OpenAIClient factory wires Qwen3-on-MLX-or-Ollama with
+Plus: the OpenAIClient factory wires Qwen3-on-Ollama with
 ``enable_thinking=true`` and a sensible max_tokens default (the
 *primary* fix; the safety net is the backstop).
 """
@@ -31,20 +29,16 @@ from tradingagents.llm_clients.openai_client import (
 )
 
 
-def _client(*, provider="mlx"):
-    base_url = (
-        "http://localhost:8081/v1" if provider == "mlx"
-        else "http://localhost:11434/v1"
-    )
+def _client():
     return NormalizedChatOpenAI(
-        model="qwen3:14b-q8_0" if provider == "ollama" else "mlx-community/Qwen3-14B-4bit",
+        model="qwen3:14b",
         api_key="placeholder",
-        base_url=base_url,
+        base_url="http://localhost:11434/v1",
     )
 
 
 def _response(content, reasoning=None, finish="stop"):
-    """Build a server response dict (same shape for MLX and Ollama)."""
+    """Build an Ollama OpenAI-compat response dict."""
     message = {"role": "assistant", "content": content}
     if reasoning is not None:
         message["reasoning"] = reasoning
@@ -137,42 +131,21 @@ class TestEmptyContentSafetyNet:
         ai = result.generations[0].message
         assert ai.content == ""
 
-    def test_safety_net_works_for_ollama_responses_too(self):
-        """Ollama and MLX return the same response shape — one set of
-        tests covers both."""
-        client = _client(provider="ollama")
-        result = client._create_chat_result(
-            _response(content="", reasoning="Bullish on tech.", finish="length")
-        )
-        ai = result.generations[0].message
-        assert ai.content == "Bullish on tech."
-
 
 # ---------------------------------------------------------------------------
-# Factory wiring: MLX + Ollama Qwen3 → thinking enabled + max_tokens default
+# Factory wiring: Ollama Qwen3 → thinking enabled + max_tokens default
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestFactoryWiring:
-    def test_mlx_qwen3_enables_thinking_and_max_tokens(self):
-        """Primary fix: enough headroom that thinking finishes and writes
-        its answer into ``content`` before truncation kicks in."""
-        client = OpenAIClient(
-            model="mlx-community/Qwen3-14B-4bit",
-            base_url="http://localhost:8081/v1",
-            provider="mlx",
-        )
-        llm = client.get_llm()
-        assert isinstance(llm, NormalizedChatOpenAI)
-        assert llm.max_tokens == _QWEN3_THINKING_MAX_TOKENS
-        assert llm.extra_body == {"chat_template_kwargs": {"enable_thinking": True}}
-
     def test_ollama_qwen3_enables_thinking_and_max_tokens(self):
-        """Ollama needs the explicit opt-in via chat_template_kwargs;
-        without it Ollama strips thinking server-side."""
+        """Primary fix: Ollama needs the explicit opt-in via
+        chat_template_kwargs (without it Ollama strips thinking
+        server-side), plus enough headroom that thinking finishes and
+        writes its answer into ``content`` before truncation kicks in."""
         client = OpenAIClient(
-            model="qwen3:32b-q8_0",
+            model="qwen3:32b",
             base_url="http://localhost:11434/v1",
             provider="ollama",
         )
@@ -181,12 +154,24 @@ class TestFactoryWiring:
         assert llm.max_tokens == _QWEN3_THINKING_MAX_TOKENS
         assert llm.extra_body == {"chat_template_kwargs": {"enable_thinking": True}}
 
+    def test_ollama_qwen3_quick_model_also_gets_defaults(self):
+        """The 14B quick model gets the same factory wiring; the
+        per-call thinking-OFF override happens in trading_graph.py."""
+        client = OpenAIClient(
+            model="qwen3:14b",
+            base_url="http://localhost:11434/v1",
+            provider="ollama",
+        )
+        llm = client.get_llm()
+        assert llm.max_tokens == _QWEN3_THINKING_MAX_TOKENS
+        assert llm.extra_body == {"chat_template_kwargs": {"enable_thinking": True}}
+
     def test_user_max_tokens_overrides_default(self):
         """User-provided max_tokens always wins over our default."""
         client = OpenAIClient(
-            model="mlx-community/Qwen3-14B-4bit",
-            base_url="http://localhost:8081/v1",
-            provider="mlx",
+            model="qwen3:14b",
+            base_url="http://localhost:11434/v1",
+            provider="ollama",
             max_tokens=16384,
         )
         llm = client.get_llm()
@@ -194,9 +179,10 @@ class TestFactoryWiring:
 
     def test_user_extra_body_overrides_default_thinking(self):
         """A user that wants thinking off (e.g. latency-sensitive smoke
-        test) can pass extra_body and we won't stomp it."""
+        test, or the quick-model override path) can pass extra_body and
+        we won't stomp it."""
         client = OpenAIClient(
-            model="qwen3:14b-q8_0",
+            model="qwen3:14b",
             base_url="http://localhost:11434/v1",
             provider="ollama",
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
@@ -211,17 +197,6 @@ class TestFactoryWiring:
             model="llama3:8b",
             base_url="http://localhost:11434/v1",
             provider="ollama",
-        )
-        llm = client.get_llm()
-        assert llm.max_tokens is None
-        assert llm.extra_body is None
-
-    def test_mlx_non_qwen3_does_not_force_thinking(self):
-        """Symmetric check for MLX with a non-Qwen model."""
-        client = OpenAIClient(
-            model="mlx-community/Mistral-7B-v0.3-4bit",
-            base_url="http://localhost:8081/v1",
-            provider="mlx",
         )
         llm = client.get_llm()
         assert llm.max_tokens is None
