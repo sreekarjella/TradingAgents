@@ -21,8 +21,8 @@
 
 [llm]
 provider = "ollama"               # Options: ollama, openai, anthropic, google, xai, deepseek, qwen, openrouter, azure, mlx
-deep_think_model = "qwen3:32b-q8_0"      # Used for: Research debate, Portfolio Manager decision (slower, smarter, Q8 for max quality)
-quick_think_model = "qwen3:14b-q8_0"     # Used for: Analysts, tool calls, risk discussion (faster, lighter, Q8 for max quality)
+deep_think_model = "qwen3:32b"           # Q4 32B + thinking ON (set in trading_graph.py). Q8 was swap-thrashing on 48GB RAM.
+quick_think_model = "qwen3:14b"          # Q4 14B + thinking OFF for speed. Combined: 29GB RAM — fits comfortably.
 backend_url = ""                   # Leave empty for auto-detect. Override for custom endpoint (e.g. "http://localhost:11434/v1")
 
 # Per-model backend URLs (optional — set these when quick & deep models run on different servers)

@@ -90,11 +90,28 @@ class TradingAgentsGraph:
             base_url=self.config.get("deep_backend_url") or self.config.get("backend_url"),
             **llm_kwargs,
         )
+
+        # Quick client: explicitly disable Qwen3 thinking mode. Tool-calling
+        # and analyst rounds invoke the quick model ~20–30 times per ticker;
+        # thinking adds 1–4K reasoning tokens per call (~4x latency) for
+        # marginal quality gain on largely mechanical work. Thinking stays
+        # ON for the deep model where it actually shifts research-debate
+        # and final-decision quality. The OpenAIClient factory only injects
+        # this override for Qwen3-on-MLX-or-Ollama — other providers ignore
+        # it harmlessly.
+        quick_kwargs = dict(llm_kwargs)
+        if (
+            self.config["llm_provider"] in ("mlx", "ollama")
+            and "qwen3" in self.config["quick_think_llm"].lower()
+        ):
+            quick_kwargs["extra_body"] = {
+                "chat_template_kwargs": {"enable_thinking": False}
+            }
         quick_client = create_llm_client(
             provider=self.config["llm_provider"],
             model=self.config["quick_think_llm"],
             base_url=self.config.get("quick_backend_url") or self.config.get("backend_url"),
-            **llm_kwargs,
+            **quick_kwargs,
         )
 
         self.deep_thinking_llm = deep_client.get_llm()
