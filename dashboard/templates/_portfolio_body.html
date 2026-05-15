@@ -133,8 +133,14 @@
     {# ── Allocation pie chart (1/3 width) ───────────────────────────── #}
     <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-5">
       <h2 class="text-base font-semibold text-wm-text dark:text-dark-text mb-4">Allocation</h2>
+      {#
+        Fixed-height wrapper is required because Chart.js with
+        responsive:true + maintainAspectRatio:false ignores any
+        height set on <canvas>. ``position: relative`` is what lets
+        Chart.js's internal absolute-positioned sizing wrapper work.
+      #}
       <div style="height: 300px; position: relative;">
-        <canvas id="allocationChart"></canvas>
+        <canvas id="allocationChart" style="display: block; width: 100%; height: 100%;"></canvas>
       </div>
       {# Legend below #}
       <div class="mt-4 space-y-1">
@@ -156,19 +162,28 @@
 
   {# ── Chart init (runs on initial page load AND after HTMX swap) ──── #}
   {#
-    Important: HTMX evaluates inline <script> in swapped content, but
-    DOMContentLoaded won't fire. So we run the init immediately and
-    destroy any pre-existing chart instance bound to this canvas (the
-    one from the previous render) before drawing the new one. Without
-    the destroy() call Chart.js complains: "Canvas is already in use".
+    Two subtle traps live here:
+
+    1. HTMX evaluates inline <script> in swapped content, but it runs
+       SYNCHRONOUSLY during the swap — before the browser has done
+       layout on the new DOM. If we call `new Chart(canvas, ...)` right
+       now, Chart.js measures the canvas while its parent grid cell
+       still has its old/zero width and locks the chart at the wrong
+       size, which looks like 'cut or zoomed' on every refresh.
+
+       Fix: defer init with requestAnimationFrame so layout settles for
+       one frame before Chart.js does its first measurement.
+
+    2. After a swap the canvas element is brand new (outerHTML wiped
+       the old one), but Chart.js keeps an internal registry keyed by
+       DOM node. Calling `Chart.getChart(canvas)?.destroy()` is a
+       no-op safety net for the rare case where someone re-runs the
+       script against a still-bound canvas (e.g. inner-HTML swap).
   #}
   <script>
     (function () {
       const canvas = document.getElementById('allocationChart');
       if (!canvas || typeof Chart === 'undefined') return;
-
-      const existing = Chart.getChart(canvas);
-      if (existing) existing.destroy();
 
       const labels = [
         {% for h in holdings %}'{{ h.ticker.replace(".NS","") }}',{% endfor %}
@@ -187,30 +202,40 @@
 
       const isDark = document.documentElement.classList.contains('dark');
 
-      new Chart(canvas, {
-        type: 'doughnut',
-        data: {
-          labels: labels,
-          datasets: [{
-            data: data,
-            backgroundColor: COLORS.slice(0, labels.length),
-            borderWidth: 2,
-            borderColor: isDark ? '#1e1e1e' : '#fff',
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          cutout: '60%',
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: ctx => `${ctx.label}: ${ctx.parsed.toFixed(1)}%`
+      // Wait one frame for HTMX-swapped DOM to be laid out, then init.
+      requestAnimationFrame(function () {
+        const existing = Chart.getChart(canvas);
+        if (existing) existing.destroy();
+
+        new Chart(canvas, {
+          type: 'doughnut',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: data,
+              backgroundColor: COLORS.slice(0, labels.length),
+              borderWidth: 2,
+              borderColor: isDark ? '#1e1e1e' : '#fff',
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '60%',
+            // Disable the entrance animation on refresh — it makes the
+            // 'jump' more visible and serves no purpose for a value
+            // update on a chart the user is already looking at.
+            animation: { duration: 0 },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: ctx => `${ctx.label}: ${ctx.parsed.toFixed(1)}%`
+                }
               }
             }
           }
-        }
+        });
       });
     })();
   </script>
