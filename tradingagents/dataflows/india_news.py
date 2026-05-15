@@ -39,6 +39,14 @@ _ECONOMY_FEEDS: list[str] = [
 _ALL_FEEDS: list[str] = _MARKET_FEEDS + _ECONOMY_FEEDS
 _FEED_TIMEOUT_SECS: int = 10
 
+# Browser-shaped UA — Moneycontrol (and a few others) return 403 to anything
+# that smells like a bot. Mimicking a real Chrome string keeps them happy.
+_BROWSER_UA: str = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
+
 # Ticker → human-readable company name (top NSE/BSE stocks)
 _TICKER_NAME_MAP: dict[str, str] = {
     "RELIANCE": "Reliance", "TCS": "TCS", "HDFCBANK": "HDFC Bank",
@@ -127,7 +135,10 @@ def _fetch_entries(
         try:
             resp = requests.get(
                 url,
-                headers={"User-Agent": "TradingAgents/1.0"},
+                headers={
+                    "User-Agent": _BROWSER_UA,
+                    "Accept": "application/rss+xml, application/xml, text/xml, */*",
+                },
                 timeout=_FEED_TIMEOUT_SECS,
             )
             resp.raise_for_status()
@@ -160,6 +171,16 @@ def _fetch_entries(
             logger.warning(
                 "RSS feed blocked (%s) — will skip for this session: %s",
                 _source_label(url), short_reason,
+            )
+        except requests.HTTPError as exc:
+            # 403/404/etc. — the publisher is actively blocking us. No point
+            # retrying within this process; cache the domain like we do for
+            # connection errors.
+            _failed_domains.add(domain)
+            status = getattr(exc.response, "status_code", "?")
+            logger.warning(
+                "RSS feed unavailable (%s): %s Client Error — caching domain for this session",
+                _source_label(url), status,
             )
         except requests.RequestException as exc:
             logger.warning("RSS feed unavailable (%s): %s", _source_label(url), exc)

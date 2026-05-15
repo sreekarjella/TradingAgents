@@ -188,6 +188,32 @@ class TestFetchEntries:
         entries = _fetch_entries(["https://bad.url"], datetime(2026, 5, 1), datetime(2026, 5, 9))
         assert entries == []
 
+    def test_http_error_caches_domain(self):
+        """403/404/etc. should poison the domain so we don't hammer it again.
+
+        Regression: in pipeline_2026-05-15_013806.log Moneycontrol returned 403
+        on every single call (~40 times) because RequestException didn't trigger
+        the failed-domain cache.
+        """
+        import requests
+        from tradingagents.dataflows import india_news as _mod
+
+        # Build a 403 response that raise_for_status() will raise on.
+        bad_resp = MagicMock()
+        bad_resp.status_code = 403
+        http_err = requests.HTTPError("403 Client Error: Forbidden")
+        http_err.response = bad_resp
+        bad_resp.raise_for_status = MagicMock(side_effect=http_err)
+
+        with patch("tradingagents.dataflows.india_news.requests.get", return_value=bad_resp) as mock_get:
+            url = "https://www.moneycontrol.com/rss/marketreports.xml"
+            # Two back-to-back calls; the second must be skipped via cache.
+            _fetch_entries([url], datetime(2026, 5, 1), datetime(2026, 5, 9))
+            _fetch_entries([url], datetime(2026, 5, 1), datetime(2026, 5, 9))
+
+            assert mock_get.call_count == 1, "403 should cache the domain after the first call"
+            assert "www.moneycontrol.com" in _mod._failed_domains
+
 
 @pytest.mark.unit
 class TestGetNewsIndiaRSS:
