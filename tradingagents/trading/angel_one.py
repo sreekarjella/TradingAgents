@@ -34,6 +34,32 @@ _EXCHANGE_BSE = "BSE"
 _PRODUCT_TYPE = "DELIVERY"  # CNC for delivery trades
 
 
+def _extract_order_id(result: object) -> str:
+    """Pull the order_id out of whatever ``placeOrder`` returned.
+
+    SmartAPI's ``placeOrder`` historically returns either a plain string
+    order_id OR a wrapper dict like
+    ``{"status": True, "data": {"orderid": "23121100xxxxxx"}}``.
+    The legacy ``str(result)`` fallback stored the literal stringified
+    dict ("{'status': True, 'data': ...}") which is useless for any
+    downstream lookup. Be paranoid and unwrap explicitly.
+    """
+    if isinstance(result, str) and result:
+        return result
+    if isinstance(result, dict):
+        # Common shape: {"status": True, "data": {"orderid": "..."}}
+        data = result.get("data") or {}
+        if isinstance(data, dict):
+            order_id = data.get("orderid") or data.get("order_id")
+            if order_id:
+                return str(order_id)
+        # Fallback: top-level orderid (older SDK versions)
+        order_id = result.get("orderid") or result.get("order_id")
+        if order_id:
+            return str(order_id)
+    raise RuntimeError(f"Angel One placeOrder returned no usable order_id: {result!r}")
+
+
 def _strip_suffix(ticker: str) -> str:
     """Strip .NS/.BO suffix for Angel One API."""
     for suffix in (".NS", ".BO"):
@@ -202,7 +228,7 @@ class AngelOneBroker(BrokerInterface):
 
         try:
             result = api.placeOrder(order_params)
-            order_id = result if isinstance(result, str) else str(result)
+            order_id = _extract_order_id(result)
             ltp = price or self.get_ltp(ticker)
             total_value = ltp * quantity
 

@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 import yfinance as yf
 
@@ -44,12 +45,25 @@ class PaperBroker(BrokerInterface):
     # Database setup
     # ------------------------------------------------------------------
 
-    def _conn(self) -> sqlite3.Connection:
+    @contextmanager
+    def _conn(self) -> Iterator[sqlite3.Connection]:
+        """Yield a SQLite connection that is **always** closed on exit.
+
+        Note: ``sqlite3.Connection``'s own ``__enter__`` / ``__exit__`` only
+        commits or rolls back the transaction — it does NOT close the
+        connection. Wrapping in our own context manager guarantees the
+        underlying file descriptor is released, otherwise high-frequency
+        callers (run_daily over many tickers) leak FDs until ulimit is hit.
+        """
         conn = sqlite3.connect(str(self.db_path))
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
-        return conn
+        try:
+            with conn:  # commits on success, rolls back on exception
+                yield conn
+        finally:
+            conn.close()
 
     def _init_db(self) -> None:
         with self._conn() as conn:

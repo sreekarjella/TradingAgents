@@ -195,6 +195,22 @@ class TradingAgentsGraph:
             ),
         }
 
+    def _benchmark_ticker(self) -> str:
+        """Resolve the alpha benchmark ticker for the active market.
+
+        Honours an explicit ``benchmark_ticker`` in config. Otherwise
+        derives a sensible default per market (Nifty 50 for India,
+        S&P 500 for US). The previous unconditional ``"SPY"`` default
+        silently produced meaningless alpha numbers for NSE stocks —
+        the reflector LLM then consumed those as truth.
+        """
+        explicit = self.config.get("benchmark_ticker")
+        if explicit:
+            return explicit
+        if is_india_market():
+            return "^NSEI"  # Nifty 50
+        return "SPY"
+
     def _fetch_returns(
         self, ticker: str, trade_date: str, holding_days: int = 5
     ) -> Tuple[Optional[float], Optional[float], Optional[int]]:
@@ -221,7 +237,8 @@ class TradingAgentsGraph:
             end_str = end.strftime("%Y-%m-%d")
 
             stock = yf.Ticker(ticker).history(start=trade_date, end=end_str)
-            spy = yf.Ticker(self.config.get("benchmark_ticker", "SPY")).history(start=trade_date, end=end_str)
+            benchmark_ticker = self._benchmark_ticker()
+            spy = yf.Ticker(benchmark_ticker).history(start=trade_date, end=end_str)
 
             if len(stock) < 2 or len(spy) < 2:
                 return None, None, None

@@ -993,9 +993,19 @@ def run_analysis(checkpoint: bool = False):
                         f.write(text)
         return wrapper
 
-    message_buffer.add_message = save_message_decorator(message_buffer, "add_message")
-    message_buffer.add_tool_call = save_tool_call_decorator(message_buffer, "add_tool_call")
-    message_buffer.update_report_section = save_report_section_decorator(message_buffer, "update_report_section")
+    # Guard against double-wrapping: ``message_buffer`` is module-global,
+    # so a second invocation of ``run_analysis`` in the same process would
+    # otherwise stack decorators and write each log line N times. We tag
+    # the bound methods after wrapping and skip if already tagged.
+    if not getattr(message_buffer.add_message, "_logging_wrapped", False):
+        message_buffer.add_message = save_message_decorator(message_buffer, "add_message")
+        message_buffer.add_message._logging_wrapped = True
+    if not getattr(message_buffer.add_tool_call, "_logging_wrapped", False):
+        message_buffer.add_tool_call = save_tool_call_decorator(message_buffer, "add_tool_call")
+        message_buffer.add_tool_call._logging_wrapped = True
+    if not getattr(message_buffer.update_report_section, "_logging_wrapped", False):
+        message_buffer.update_report_section = save_report_section_decorator(message_buffer, "update_report_section")
+        message_buffer.update_report_section._logging_wrapped = True
 
     # Now start the display layout
     layout = create_layout()
@@ -1069,18 +1079,22 @@ def run_analysis(checkpoint: bool = False):
                 # Only update status when there's actual content
                 if bull_hist or bear_hist:
                     update_research_team_status("in_progress")
+                # Build combined investment_plan content in ONE write — the
+                # legacy code called update_report_section three times with the
+                # same key, so only the last (judge) survived and bull/bear
+                # analyses were silently dropped from the saved report.
+                parts = []
                 if bull_hist:
-                    message_buffer.update_report_section(
-                        "investment_plan", f"### Bull Researcher Analysis\n{bull_hist}"
-                    )
+                    parts.append(f"### Bull Researcher Analysis\n{bull_hist}")
                 if bear_hist:
+                    parts.append(f"### Bear Researcher Analysis\n{bear_hist}")
+                if judge:
+                    parts.append(f"### Research Manager Decision\n{judge}")
+                if parts:
                     message_buffer.update_report_section(
-                        "investment_plan", f"### Bear Researcher Analysis\n{bear_hist}"
+                        "investment_plan", "\n\n".join(parts)
                     )
                 if judge:
-                    message_buffer.update_report_section(
-                        "investment_plan", f"### Research Manager Decision\n{judge}"
-                    )
                     update_research_team_status("completed")
                     message_buffer.update_agent_status("Trader", "in_progress")
 
@@ -1101,30 +1115,30 @@ def run_analysis(checkpoint: bool = False):
                 neu_hist = risk_state.get("neutral_history", "").strip()
                 judge = risk_state.get("judge_decision", "").strip()
 
+                if agg_hist and message_buffer.agent_status.get("Aggressive Analyst") != "completed":
+                    message_buffer.update_agent_status("Aggressive Analyst", "in_progress")
+                if con_hist and message_buffer.agent_status.get("Conservative Analyst") != "completed":
+                    message_buffer.update_agent_status("Conservative Analyst", "in_progress")
+                if neu_hist and message_buffer.agent_status.get("Neutral Analyst") != "completed":
+                    message_buffer.update_agent_status("Neutral Analyst", "in_progress")
+                if judge and message_buffer.agent_status.get("Portfolio Manager") != "completed":
+                    message_buffer.update_agent_status("Portfolio Manager", "in_progress")
+
+                # Single combined write — same bug as investment_debate above:
+                # repeated overwrites would drop all but the last contributor.
+                parts = []
                 if agg_hist:
-                    if message_buffer.agent_status.get("Aggressive Analyst") != "completed":
-                        message_buffer.update_agent_status("Aggressive Analyst", "in_progress")
-                    message_buffer.update_report_section(
-                        "final_trade_decision", f"### Aggressive Analyst Analysis\n{agg_hist}"
-                    )
+                    parts.append(f"### Aggressive Analyst Analysis\n{agg_hist}")
                 if con_hist:
-                    if message_buffer.agent_status.get("Conservative Analyst") != "completed":
-                        message_buffer.update_agent_status("Conservative Analyst", "in_progress")
-                    message_buffer.update_report_section(
-                        "final_trade_decision", f"### Conservative Analyst Analysis\n{con_hist}"
-                    )
+                    parts.append(f"### Conservative Analyst Analysis\n{con_hist}")
                 if neu_hist:
-                    if message_buffer.agent_status.get("Neutral Analyst") != "completed":
-                        message_buffer.update_agent_status("Neutral Analyst", "in_progress")
-                    message_buffer.update_report_section(
-                        "final_trade_decision", f"### Neutral Analyst Analysis\n{neu_hist}"
-                    )
+                    parts.append(f"### Neutral Analyst Analysis\n{neu_hist}")
                 if judge:
-                    if message_buffer.agent_status.get("Portfolio Manager") != "completed":
-                        message_buffer.update_agent_status("Portfolio Manager", "in_progress")
-                        message_buffer.update_report_section(
-                            "final_trade_decision", f"### Portfolio Manager Decision\n{judge}"
-                        )
+                    parts.append(f"### Portfolio Manager Decision\n{judge}")
+                if parts:
+                    message_buffer.update_report_section(
+                        "final_trade_decision", "\n\n".join(parts)
+                    )
                         message_buffer.update_agent_status("Aggressive Analyst", "completed")
                         message_buffer.update_agent_status("Conservative Analyst", "completed")
                         message_buffer.update_agent_status("Neutral Analyst", "completed")

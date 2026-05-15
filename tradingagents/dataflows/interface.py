@@ -1,5 +1,7 @@
 import logging
 
+import requests
+
 logger = logging.getLogger(__name__)
 
 # Import from vendor-specific modules
@@ -209,9 +211,16 @@ def route_to_vendor(method: str, *args, **kwargs):
                 method, arg_summary, vendor,
             )
             continue
-        except Exception as exc:
-            # Vendor-level errors (missing API key, config issues, etc.)
-            # shouldn't crash the whole pipeline if other vendors can serve.
+        except (
+            requests.RequestException,
+            TimeoutError,
+            ConnectionError,
+            ValueError,
+            KeyError,
+        ) as exc:
+            # Network / data-shape failures we expect from external vendors.
+            # Programming bugs (TypeError, AttributeError, ImportError, etc.)
+            # are NOT in this list — they should propagate so we notice them.
             last_error = exc
             logger.info(
                 "📊 API: %s(%s) → %s failed (%s), trying next vendor",
@@ -229,5 +238,4 @@ def route_to_vendor(method: str, *args, **kwargs):
         return last_result
     if last_error is not None:
         raise last_error
-    raise RuntimeError(f"No available vendor for '{method}'")
     raise RuntimeError(f"No available vendor for '{method}'")
