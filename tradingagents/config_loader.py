@@ -53,6 +53,9 @@ _DEFAULTS: dict[str, Any] = {
         "google_thinking_level": "",
         "openai_reasoning_effort": "",
         "anthropic_effort": "",
+        # Ollama context window (tokens). 0 = use server default; any
+        # positive int is forwarded as options.num_ctx on every request.
+        "ollama_num_ctx": 32768,
     },
     "market": {
         "benchmark_ticker": "^NSEI",
@@ -351,6 +354,11 @@ class TradingConfig:
             ),
             "anthropic_effort": (
                 self._raw["llm"]["anthropic_effort"] or None
+            ),
+            # 0 (or unset) means "defer to Ollama's own default";
+            # any positive int is forwarded as options.num_ctx.
+            "ollama_num_ctx": (
+                self._raw["llm"].get("ollama_num_ctx") or None
             ),
             # Pipeline
             "max_debate_rounds": pipeline["max_debate_rounds"],

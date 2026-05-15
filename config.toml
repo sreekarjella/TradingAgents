@@ -35,6 +35,23 @@ google_thinking_level = ""         # Options: high, minimal
 openai_reasoning_effort = ""       # Options: high, medium, low
 anthropic_effort = ""              # Options: high, medium, low
 
+# Ollama context window (in tokens). Only applied when llm_provider = "ollama".
+#
+# Why this matters:
+#   The full pipeline accumulates ~50-80K tokens of state by the time the
+#   portfolio_manager runs (4 analyst reports + bull/bear debate + research
+#   plan + trader plan + risk debate). If num_ctx is smaller than the
+#   conversation, Ollama silently TRUNCATES from the start and the model
+#   makes decisions on partial information.
+#
+# Sizing guide:
+#   16384  (~16K)  Safe for 16-24GB RAM. Loses some early-pipeline context.
+#   32768  (~32K)  Recommended default. Fits 48GB comfortably (Q4 32B + 14B).
+#   40960  (~40K)  Qwen3 native max. Use only on 64GB+ machines.
+#
+# Set to 0 to use Ollama's own default (which varies by version).
+ollama_num_ctx = 32768
+
 
 # ── Market ──────────────────────────────────────────────────────────────
 # Defines which market you're trading and how agents understand it.

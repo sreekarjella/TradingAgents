@@ -176,6 +176,14 @@ class TradingAgentsGraph:
             if effort:
                 kwargs["effort"] = effort
 
+        elif provider == "ollama":
+            # num_ctx is forwarded to the Ollama server as options.num_ctx
+            # so the deep + quick models always run with a known context
+            # window instead of whatever Ollama happens to default to.
+            num_ctx = self.config.get("ollama_num_ctx")
+            if num_ctx:
+                kwargs["num_ctx"] = num_ctx
+
         return kwargs
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:

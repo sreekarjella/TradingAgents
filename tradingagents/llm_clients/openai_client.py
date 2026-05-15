@@ -245,10 +245,25 @@ class OpenAIClient(BaseLLMClient):
         )
         if is_qwen3_local:
             llm_kwargs.setdefault("max_tokens", _QWEN3_THINKING_MAX_TOKENS)
-            if "extra_body" not in self.kwargs:
-                llm_kwargs["extra_body"] = {
-                    "chat_template_kwargs": {"enable_thinking": True}
-                }
+            # Build extra_body, preserving anything the user supplied
+            # (e.g. trading_graph.py overrides this for the quick model
+            # to disable thinking).
+            extra_body = dict(self.kwargs.get(
+                "extra_body",
+                {"chat_template_kwargs": {"enable_thinking": True}},
+            ))
+            # Inject num_ctx as options.num_ctx — Ollama's OpenAI-compat
+            # endpoint accepts a top-level ``options`` object that maps
+            # directly to the native /api/chat options field. Without
+            # this, every request inherits whatever the Ollama server
+            # defaults to (varies by version: 2048 on ≤0.4, the model's
+            # native max on newer builds). Explicit > implicit.
+            num_ctx = self.kwargs.get("num_ctx")
+            if num_ctx:
+                options = dict(extra_body.get("options", {}))
+                options.setdefault("num_ctx", num_ctx)
+                extra_body["options"] = options
+            llm_kwargs["extra_body"] = extra_body
             # Users can override extra_body via model_kwargs to disable
             # thinking for a specific run (e.g. latency-sensitive tests).
 

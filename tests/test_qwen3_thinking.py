@@ -201,3 +201,81 @@ class TestFactoryWiring:
         llm = client.get_llm()
         assert llm.max_tokens is None
         assert llm.extra_body is None
+
+
+@pytest.mark.unit
+class TestOllamaNumCtx:
+    """num_ctx must reach Ollama as ``options.num_ctx`` so the request
+    runs with the configured context window instead of whatever the
+    server happens to default to (varies across Ollama versions)."""
+
+    def test_num_ctx_injected_into_extra_body_options(self):
+        client = OpenAIClient(
+            model="qwen3:32b",
+            base_url="http://localhost:11434/v1",
+            provider="ollama",
+            num_ctx=32768,
+        )
+        llm = client.get_llm()
+        assert llm.extra_body == {
+            "chat_template_kwargs": {"enable_thinking": True},
+            "options": {"num_ctx": 32768},
+        }
+
+    def test_num_ctx_merges_with_user_extra_body(self):
+        """The quick-model path overrides extra_body to disable thinking;
+        num_ctx must still survive that override."""
+        client = OpenAIClient(
+            model="qwen3:14b",
+            base_url="http://localhost:11434/v1",
+            provider="ollama",
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            num_ctx=16384,
+        )
+        llm = client.get_llm()
+        assert llm.extra_body == {
+            "chat_template_kwargs": {"enable_thinking": False},
+            "options": {"num_ctx": 16384},
+        }
+
+    def test_num_ctx_omitted_when_not_configured(self):
+        """Without num_ctx, no options dict is added (Ollama uses its default)."""
+        client = OpenAIClient(
+            model="qwen3:32b",
+            base_url="http://localhost:11434/v1",
+            provider="ollama",
+        )
+        llm = client.get_llm()
+        assert llm.extra_body == {"chat_template_kwargs": {"enable_thinking": True}}
+        assert "options" not in llm.extra_body
+
+    def test_num_ctx_ignored_for_non_qwen3_models(self):
+        """num_ctx wiring is gated on the qwen3 detection — other Ollama
+        models stay untouched (we'd add them when we know they need it)."""
+        client = OpenAIClient(
+            model="llama3:8b",
+            base_url="http://localhost:11434/v1",
+            provider="ollama",
+            num_ctx=32768,
+        )
+        llm = client.get_llm()
+        # llama3 path doesn't touch extra_body at all
+        assert llm.extra_body is None
+
+    def test_num_ctx_user_value_in_extra_body_wins(self):
+        """If the user already specified options.num_ctx in extra_body, we
+        must NOT silently overwrite their explicit choice."""
+        client = OpenAIClient(
+            model="qwen3:32b",
+            base_url="http://localhost:11434/v1",
+            provider="ollama",
+            extra_body={
+                "chat_template_kwargs": {"enable_thinking": True},
+                "options": {"num_ctx": 8192, "temperature": 0.5},
+            },
+            num_ctx=32768,
+        )
+        llm = client.get_llm()
+        # User's 8192 wins over the kwarg-supplied 32768; sibling options preserved.
+        assert llm.extra_body["options"]["num_ctx"] == 8192
+        assert llm.extra_body["options"]["temperature"] == 0.5
