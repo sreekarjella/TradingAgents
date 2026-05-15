@@ -16,6 +16,7 @@ from .y_finance import (
 )
 from .yfinance_news import get_news_yfinance, get_global_news_yfinance
 from .india_news import get_news_india_rss, get_global_news_india_rss
+from .google_news_rss import get_news_google_rss, get_global_news_google_rss
 from .alpha_vantage_stock import get_stock as get_alpha_vantage_stock
 from .alpha_vantage_indicator import get_indicator as get_alpha_vantage_indicator
 from .alpha_vantage_fundamentals import (
@@ -71,6 +72,7 @@ VENDOR_LIST = [
     "yfinance",
     "alpha_vantage",
     "india_rss",
+    "google_rss",
 ]
 
 # Mapping of methods to their vendor-specific implementations
@@ -107,11 +109,13 @@ VENDOR_METHODS = {
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
         "india_rss": get_news_india_rss,
+        "google_rss": get_news_google_rss,
     },
     "get_global_news": {
         "yfinance": get_global_news_yfinance,
         "alpha_vantage": get_alpha_vantage_global_news,
         "india_rss": get_global_news_india_rss,
+        "google_rss": get_global_news_google_rss,
     },
     "get_insider_transactions": {
         "alpha_vantage": get_alpha_vantage_insider_transactions,
@@ -144,14 +148,41 @@ def get_vendor(category: str, method: str = None) -> str:
 # Phrases that signal an empty/no-data result — triggers fallback to next vendor.
 _EMPTY_MARKERS = ("no ", "not found", "no data", "unavailable", "error ")
 
+# Threshold below which a *successful* vendor response still counts as
+# essentially empty for news payloads. Alpha Vantage returns ~140-200 char
+# JSON envelopes like ``{"items": "0", "sentiment_score_definition": ...}``
+# when there are no articles for an Indian ticker — those slipped past the
+# old marker check because the JSON contains none of the english markers.
+_TINY_RESULT_THRESHOLD = 200
+
+# JSON-envelope fingerprints for known "no articles" responses.
+_NO_NEWS_FINGERPRINTS = (
+    '"items": "0"',   # Alpha Vantage NEWS_SENTIMENT, no results
+    '"items":"0"',
+    '"feed": []',     # AV with empty feed array (rare but possible)
+)
+
 
 def _is_empty_result(result) -> bool:
-    """Return True if the vendor result indicates no useful data was returned."""
+    """Return True if the vendor result indicates no useful data was returned.
+
+    Three checks, in order of cost:
+    1. Falsy (``None`` / ``""``) — trivially empty.
+    2. Tiny string with one of the english empty markers (covers our own
+       "No Indian news found..." sentinel and similar).
+    3. JSON envelope from a vendor that returned 0 items — Alpha Vantage's
+       NEWS_SENTIMENT response for unknown / unsupported tickers.
+    """
     if not result:
         return True
-    if isinstance(result, str) and len(result) < 200:
+    if not isinstance(result, str):
+        return False
+    if len(result) < _TINY_RESULT_THRESHOLD:
         lower = result.lower()
-        return any(lower.startswith(m) or m in lower for m in _EMPTY_MARKERS)
+        if any(lower.startswith(m) or m in lower for m in _EMPTY_MARKERS):
+            return True
+        if any(fp in result for fp in _NO_NEWS_FINGERPRINTS):
+            return True
     return False
 
 
@@ -192,12 +223,18 @@ def route_to_vendor(method: str, *args, **kwargs):
 
         try:
             result = impl_func(*args, **kwargs)
-            if _is_empty_result(result) and vendor != fallback_vendors[-1]:
-                logger.info(
-                    "📊 API: %s(%s) → %s returned empty, trying next vendor",
-                    method, arg_summary, vendor,
-                )
-                last_result = result  # keep it in case all vendors are empty
+            if _is_empty_result(result):
+                if vendor != fallback_vendors[-1]:
+                    logger.info(
+                        "📊 API: %s(%s) → %s returned empty, trying next vendor",
+                        method, arg_summary, vendor,
+                    )
+                    last_result = result  # keep it in case all vendors are empty
+                    continue
+                # Last vendor in the chain also empty — record but don't
+                # log a misleading "success" line; the all-vendors-empty
+                # WARNING below will surface it loud and clear.
+                last_result = result
                 continue
             chars = len(result) if isinstance(result, str) else 0
             logger.info(
@@ -232,8 +269,9 @@ def route_to_vendor(method: str, *args, **kwargs):
     if last_result is not None:
         chars = len(last_result) if isinstance(last_result, str) else 0
         logger.warning(
-            "📊 API: %s(%s) → all vendors returned empty (%s chars)",
-            method, arg_summary, f"{chars:,}",
+            "⚠️  API: %s(%s) → ALL %d vendors returned empty/no-data (last: %s chars). "
+            "LLM will analyze this stock without fresh news context.",
+            method, arg_summary, len(fallback_vendors), f"{chars:,}",
         )
         return last_result
     if last_error is not None:

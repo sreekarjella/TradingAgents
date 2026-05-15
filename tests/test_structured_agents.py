@@ -230,3 +230,30 @@ class TestResearchManagerAgent:
         rm = create_research_manager(llm)
         result = rm(_make_rm_state())
         assert result["investment_plan"] == plain_response
+
+    def test_falls_back_to_freetext_when_structured_returns_none(self, caplog):
+        """Qwen3 sometimes returns ``None`` from with_structured_output instead of raising.
+
+        Without the explicit ``None`` guard, the render function would crash with
+        a confusing ``'NoneType' object has no attribute 'recommendation'`` error.
+        We expect a clean warning + free-text fallback instead.
+        """
+        import logging
+
+        plain_response = "**Recommendation**: Hold\n\n**Rationale**: Qwen blanked.\n\n**Strategic Actions**: ..."
+        structured = MagicMock()
+        structured.invoke.return_value = None  # the bug we're guarding against
+        llm = MagicMock()
+        llm.with_structured_output.return_value = structured
+        llm.invoke.return_value = MagicMock(content=plain_response)
+
+        rm = create_research_manager(llm)
+        with caplog.at_level(logging.WARNING):
+            result = rm(_make_rm_state())
+
+        assert result["investment_plan"] == plain_response
+        # Warning text must mention the failure mode in plain English so it's grep-able.
+        assert any(
+            "structured-output returned None" in rec.message and "Research Manager" in rec.message
+            for rec in caplog.records
+        ), f"expected None-warning in caplog, got: {[r.message for r in caplog.records]}"

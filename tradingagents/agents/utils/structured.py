@@ -58,15 +58,36 @@ def invoke_structured_or_freetext(
     invocations, a list of message dicts for chat models that take that
     shape). The same value is forwarded to the free-text path so the
     fallback sees the same input the structured call did.
+
+    Two distinct failure modes are handled:
+
+    1. ``structured_llm.invoke(prompt)`` raises an exception — transient
+       provider error, malformed JSON that pydantic refused outright, etc.
+    2. ``structured_llm.invoke(prompt)`` returns ``None`` — some providers
+       (notably Ollama-hosted Qwen3 with thinking tokens) silently emit a
+       null result instead of raising when the model fails to produce a
+       schema-conforming JSON object. The old code then crashed with a
+       confusing ``'NoneType' object has no attribute '<field>'`` error
+       inside ``render``; we now treat ``None`` as a first-class failure
+       signal and log a clearer warning.
     """
     if structured_llm is not None:
         try:
             result = structured_llm.invoke(prompt)
-            return render(result)
+            if result is None:
+                logger.warning(
+                    "%s: structured-output returned None "
+                    "(model produced no schema-conforming JSON); "
+                    "retrying once as free text",
+                    agent_name,
+                )
+            else:
+                return render(result)
         except Exception as exc:
             logger.warning(
-                "%s: structured-output invocation failed (%s); retrying once as free text",
-                agent_name, exc,
+                "%s: structured-output invocation failed (%s: %s); "
+                "retrying once as free text",
+                agent_name, type(exc).__name__, exc,
             )
 
     response = plain_llm.invoke(prompt)

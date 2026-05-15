@@ -71,7 +71,7 @@ news_queries = [
 core_stock_apis = "yfinance"           # Options: yfinance, alpha_vantage
 technical_indicators = "yfinance"      # Options: yfinance, alpha_vantage
 fundamental_data = "yfinance"          # Options: yfinance, alpha_vantage
-news_data = "india_rss,yfinance"       # Comma-separated fallback: tries india_rss first, then yfinance
+news_data = "india_rss,google_rss,yfinance"  # Comma-separated fallback chain. google_rss is keyless — great safety net for thinly-covered tickers (ONGC, SUNPHARMA, etc).
 
 # Per-tool overrides (uncomment to override a specific tool's vendor)
 # [data_vendors.tool_overrides]
