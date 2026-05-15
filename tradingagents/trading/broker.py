@@ -104,3 +104,13 @@ class BrokerInterface(ABC):
     @abstractmethod
     def get_cash(self) -> float:
         """Get available cash balance."""
+
+    def count_active_positions(self) -> int:
+        """Count holdings with positive quantity — cheap, no price fetch.
+
+        Default falls back to ``len(get_holdings())`` so subclasses without
+        a fast path stay correct, but live/paper implementations should
+        override this with a ``SELECT COUNT(*)`` to avoid fanning out N
+        yfinance calls just to learn how many positions you hold.
+        """
+        return sum(1 for h in self.get_holdings() if h.quantity > 0)

@@ -424,17 +424,27 @@ class TestDeferredReflection:
         assert msft["ticker"] == "MSFT" and msft["pending"] is True
 
     def test_update_atomic_write(self, tmp_path):
-        """A pre-existing .tmp file is overwritten; the log is correctly updated."""
+        """Update succeeds even when an unrelated stale tmp file exists.
+
+        We now use ``tempfile.mkstemp`` to get a unique tmp filename per
+        write (avoids races between concurrent writers), so an arbitrary
+        pre-existing ``trading_memory.tmp`` is irrelevant — the contract
+        is that the update completes correctly, not that it cleans up
+        unrelated stale files.
+        """
         log = make_log(tmp_path)
         log.store_decision("NVDA", "2026-01-10", DECISION_BUY)
         stale_tmp = tmp_path / "trading_memory.tmp"
-        stale_tmp.write_text("GARBAGE CONTENT — should be overwritten", encoding="utf-8")
+        stale_tmp.write_text("GARBAGE CONTENT — not ours", encoding="utf-8")
         log.update_with_outcome("NVDA", "2026-01-10", 0.042, 0.021, 5, "Correct.")
-        assert not stale_tmp.exists()
+        # The log itself must be correctly updated.
         entries = log.load_entries()
         assert len(entries) == 1
         assert entries[0]["reflection"] == "Correct."
         assert entries[0]["pending"] is False
+        # No leaked tmp files matching our prefix should remain.
+        leaked = list(tmp_path.glob("trading_memory.md.*.tmp"))
+        assert leaked == [], f"Unique tmp files leaked: {leaked}"
 
     def test_update_noop_when_no_log_path(self):
         log = TradingMemoryLog(config=None)

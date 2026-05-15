@@ -1,8 +1,10 @@
 """Append-only markdown decision log for TradingAgents."""
 
-from typing import List, Optional
+import os
+import tempfile
 from pathlib import Path
 import re
+from typing import List, Optional
 
 from tradingagents.agents.utils.rating import parse_rating
 
@@ -16,15 +18,22 @@ class TradingMemoryLog:
     _DECISION_RE = re.compile(r"DECISION:\n(.*?)(?=\nREFLECTION:|\Z)", re.DOTALL)
     _REFLECTION_RE = re.compile(r"REFLECTION:\n(.*?)$", re.DOTALL)
 
-    def __init__(self, config: dict = None):
+    def __init__(self, config: Optional[dict] = None):
         cfg = config or {}
-        self._log_path = None
+        self._log_path: Optional[Path] = None
         path = cfg.get("memory_log_path")
         if path:
             self._log_path = Path(path).expanduser()
             self._log_path.parent.mkdir(parents=True, exist_ok=True)
         # Optional cap on resolved entries. None disables rotation.
         self._max_entries = cfg.get("memory_log_max_entries")
+        # Cached parse result, invalidated by file mtime. The log gets
+        # re-parsed on every propagate() x N tickers — with the file
+        # growing unboundedly across runs, that's a real perf cost. The
+        # cache key is mtime so any external write (or our own atomic
+        # replace) invalidates correctly.
+        self._cache_mtime: Optional[float] = None
+        self._cache_entries: List[dict] = []
 
     # --- Write path (Phase A) ---
 
@@ -52,16 +61,29 @@ class TradingMemoryLog:
     # --- Read path (Phase A) ---
 
     def load_entries(self) -> List[dict]:
-        """Parse all entries from log. Returns list of dicts."""
+        """Parse all entries from log. Returns list of dicts.
+
+        Cached by file mtime — a propagate() over 50 tickers used to
+        re-read and re-parse the entire log 100 times (twice per ticker:
+        once in _resolve_pending_entries, once in get_past_context).
+        """
         if not self._log_path or not self._log_path.exists():
             return []
+        try:
+            mtime = self._log_path.stat().st_mtime
+        except OSError:
+            mtime = None
+        if mtime is not None and mtime == self._cache_mtime:
+            return self._cache_entries
         text = self._log_path.read_text(encoding="utf-8")
         raw_entries = [e.strip() for e in text.split(self._SEPARATOR) if e.strip()]
-        entries = []
+        entries: List[dict] = []
         for raw in raw_entries:
             parsed = self._parse_entry(raw)
             if parsed:
                 entries.append(parsed)
+        self._cache_mtime = mtime
+        self._cache_entries = entries
         return entries
 
     def get_pending_entries(self) -> List[dict]:
@@ -158,9 +180,7 @@ class TradingMemoryLog:
 
         new_blocks = self._apply_rotation(new_blocks)
         new_text = self._SEPARATOR.join(new_blocks)
-        tmp_path = self._log_path.with_suffix(".tmp")
-        tmp_path.write_text(new_text, encoding="utf-8")
-        tmp_path.replace(self._log_path)
+        self._atomic_write(new_text)
 
     def batch_update_with_outcomes(self, updates: List[dict]) -> None:
         """Apply multiple outcome updates in a single read + atomic write.
@@ -212,11 +232,35 @@ class TradingMemoryLog:
 
         new_blocks = self._apply_rotation(new_blocks)
         new_text = self._SEPARATOR.join(new_blocks)
-        tmp_path = self._log_path.with_suffix(".tmp")
-        tmp_path.write_text(new_text, encoding="utf-8")
-        tmp_path.replace(self._log_path)
+        self._atomic_write(new_text)
 
     # --- Helpers ---
+
+    def _atomic_write(self, text: str) -> None:
+        """Write *text* to the log atomically via a unique temp file.
+
+        The legacy implementation reused a single ``.tmp`` suffix; if two
+        writes raced (future parallel propagate, or a misbehaving caller),
+        one would clobber the other's tmp before rename. ``mkstemp`` gives
+        us a guaranteed-unique path within the same directory so the
+        ``os.replace`` rename remains atomic on the same filesystem.
+        """
+        assert self._log_path is not None  # callers gate on this
+        parent = self._log_path.parent
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=self._log_path.name + ".", suffix=".tmp", dir=str(parent)
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(text)
+            os.replace(tmp_name, self._log_path)
+        except Exception:
+            # Best-effort cleanup if the rename never happened.
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
 
     def _apply_rotation(self, blocks: List[str]) -> List[str]:
         """Drop oldest resolved blocks when their count exceeds max_entries.

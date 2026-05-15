@@ -269,6 +269,20 @@ class PaperBroker(BrokerInterface):
         with self._conn() as conn:
             return self._get_cash(conn)
 
+    def count_active_positions(self) -> int:
+        """Cheap COUNT(*) override — avoids fanning out yfinance calls.
+
+        The base class default would call ``get_holdings()`` which fetches
+        a current price for every position via yfinance. When all you need
+        is the count (e.g. portfolio sizing checks in daily_runner), that's
+        N HTTP roundtrips for zero useful information.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM holdings WHERE quantity > 0"
+            ).fetchone()
+            return int(row[0]) if row else 0
+
     def get_holdings(self) -> list[Holding]:
         with self._conn() as conn:
             rows = conn.execute("SELECT * FROM holdings WHERE quantity > 0").fetchall()

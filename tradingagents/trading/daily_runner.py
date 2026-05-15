@@ -156,8 +156,16 @@ def run_single(
 
 
 def _count_active_positions(broker: BrokerInterface) -> int:
-    """Return the number of currently held positions."""
-    return len(broker.get_holdings())
+    """Return the number of currently held positions.
+
+    Delegates to the broker's ``count_active_positions`` so paper/live
+    backends can answer with a SQL ``COUNT(*)`` instead of fanning out
+    N yfinance roundtrips through ``get_holdings()`` (each holding
+    triggers a ``get_ltp`` price fetch). This function used to be called
+    3+ times per ``run_daily`` — a 10-position holdings review meant
+    30+ unnecessary HTTP calls just for bookkeeping.
+    """
+    return broker.count_active_positions()
 
 
 def _available_buy_slots(broker: BrokerInterface, max_positions: int) -> int:

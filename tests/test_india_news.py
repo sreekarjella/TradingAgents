@@ -146,14 +146,17 @@ def _mock_requests_get(url, headers=None, timeout=10):
     return mock_resp
 
 
-# `india_news` caches failed domains in a module-level set, so clear it
-# between tests to avoid one test's failure poisoning subsequent runs.
+# `india_news` caches failed domains AND fetched feed entries in
+# module-level state, so clear both between tests to avoid one test's
+# state leaking into the next.
 @pytest.fixture(autouse=True)
 def _reset_failed_domains():
     from tradingagents.dataflows import india_news as _mod
     _mod._failed_domains.clear()
+    _mod._feed_cache.clear()
     yield
     _mod._failed_domains.clear()
+    _mod._feed_cache.clear()
 
 
 @pytest.mark.unit

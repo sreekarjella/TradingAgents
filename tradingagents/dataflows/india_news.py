@@ -9,9 +9,11 @@ requires NTLM auth) is handled transparently via environment variables.
 """
 
 import logging
+import time
 from datetime import datetime, timedelta
 from time import mktime
 from typing import Optional
+from urllib.parse import urlparse
 
 import feedparser  # type: ignore[import-untyped]
 import requests
@@ -23,6 +25,14 @@ logger = logging.getLogger(__name__)
 # Avoids wasting ~1s per feed on retries that will never succeed within
 # the same pipeline run (e.g. ET + Moneycontrol blocked by Walmart proxy).
 _failed_domains: set[str] = set()
+
+# TTL cache for fetched feed entries. The feed contents do NOT change
+# per ticker, but ``get_news_india_rss`` is called once per ticker, and
+# pre_screen invokes it across the whole NSE universe — a 50-ticker run
+# was previously hitting each RSS URL 50 times. Cache by
+# (sorted feed URL tuple, day-of-call) and re-fetch every 15 min.
+_FEED_CACHE_TTL_SECS: int = 15 * 60
+_feed_cache: dict[tuple, tuple[float, list[dict]]] = {}
 
 _MARKET_FEEDS: list[str] = [
     "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
@@ -102,7 +112,6 @@ def _source_label(feed_url: str) -> str:
 def _extract_domain(url: str) -> str:
     """Extract domain from a feed URL for failure tracking."""
     try:
-        from urllib.parse import urlparse
         return urlparse(url).netloc
     except Exception:
         return url
@@ -115,14 +124,27 @@ def _fetch_entries(
 ) -> list[dict]:
     """Fetch and date-filter entries from multiple RSS feeds.
 
-    Uses ``requests.get`` so the ``HTTP_PROXY`` / ``HTTPS_PROXY``
-    environment variables set by ``network.configure_network()`` are
-    picked up automatically — unlike ``urllib.request`` which fails
-    with a 407 on the Walmart proxy.
+    Uses a module-level ``requests.Session`` (so HTTP_PROXY env vars are
+    still honoured AND we get connection pooling) plus a 15-minute TTL
+    cache keyed on (feed URL tuple, date window). Without the cache,
+    pre_screen → N tickers × 6 feeds = N×6 redundant HTTP roundtrips per
+    nightly run.
 
-    Domains that fail with a connection/proxy error are cached for the
-    lifetime of the process so subsequent calls skip them instantly.
+    Domains that fail with a connection/proxy/HTTP error are also cached
+    for the lifetime of the process so subsequent calls skip them
+    instantly.
     """
+    cache_key = (
+        tuple(sorted(feed_urls)),
+        start_dt.strftime("%Y-%m-%d"),
+        end_dt.strftime("%Y-%m-%d"),
+    )
+    cached = _feed_cache.get(cache_key)
+    if cached is not None:
+        ts, entries = cached
+        if time.time() - ts < _FEED_CACHE_TTL_SECS:
+            return entries
+
     entries: list[dict] = []
     seen_titles: set[str] = set()
 
@@ -152,7 +174,12 @@ def _fetch_entries(
                 if not title or title in seen_titles:
                     continue
                 pub_date = _parse_pub_date(entry)
-                if pub_date and not (start_dt <= pub_date <= end_dt + timedelta(days=1)):
+                # Drop undated articles entirely — the legacy code
+                # silently included them, polluting sentiment with
+                # potentially years-old archived pieces.
+                if pub_date is None:
+                    continue
+                if not (start_dt <= pub_date <= end_dt + timedelta(days=1)):
                     continue
                 seen_titles.add(title)
                 entries.append({
@@ -164,18 +191,12 @@ def _fetch_entries(
                 })
         except (ReqConnectionError, ProxyError) as exc:
             _failed_domains.add(domain)
-            # Truncate the exception — the full ProxyError trace is ~300 chars
-            # of nested wrappers that don't tell the user anything new beyond
-            # "this domain is blocked". Cap at 80 chars for log hygiene.
             short_reason = str(exc).split("(Caused")[0].strip()[:80]
             logger.warning(
                 "RSS feed blocked (%s) — will skip for this session: %s",
                 _source_label(url), short_reason,
             )
         except requests.HTTPError as exc:
-            # 403/404/etc. — the publisher is actively blocking us. No point
-            # retrying within this process; cache the domain like we do for
-            # connection errors.
             _failed_domains.add(domain)
             status = getattr(exc.response, "status_code", "?")
             logger.warning(
@@ -188,6 +209,7 @@ def _fetch_entries(
             logger.warning("Error parsing RSS feed: %s", url, exc_info=True)
 
     entries.sort(key=lambda e: e.get("pub_date") or datetime.min, reverse=True)
+    _feed_cache[cache_key] = (time.time(), entries)
     return entries
 
 
@@ -195,15 +217,15 @@ def _format_articles(entries: list[dict], header: str) -> str:
     """Render a list of article dicts into the expected markdown format."""
     if not entries:
         return header.rstrip(":") + " — no articles found."
-    body = ""
+    parts: list[str] = [header, ""]
     for art in entries:
-        body += f"### {art['title']} (source: {art['publisher']})\n"
+        parts.append(f"### {art['title']} (source: {art['publisher']})")
         if art["summary"]:
-            body += f"{art['summary']}\n"
+            parts.append(art["summary"])
         if art["link"]:
-            body += f"Link: {art['link']}\n"
-        body += "\n"
-    return f"{header}\n\n{body}"
+            parts.append(f"Link: {art['link']}")
+        parts.append("")
+    return "\n".join(parts)
 
 
 
