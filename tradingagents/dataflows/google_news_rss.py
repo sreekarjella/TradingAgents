@@ -21,6 +21,7 @@ functions in the vendor table.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from datetime import datetime, timedelta
 from time import mktime
@@ -31,11 +32,11 @@ import feedparser  # type: ignore[import-untyped]
 import requests
 from requests.exceptions import ConnectionError as ReqConnectionError, ProxyError
 
-from .india_news import _company_name  # reuse the same ticker → name mapping
+from .india_news import _company_name, _strip_suffix  # reuse the same ticker → name mapping
 
 logger = logging.getLogger(__name__)
 
-# ── Constants ──────────────────────────────────────────────────────────
+# ── Constants ───────────────────────────────────────────────────
 _GOOGLE_NEWS_BASE: str = "https://news.google.com/rss/search"
 _FEED_TIMEOUT_SECS: int = 10
 _BROWSER_UA: str = (
@@ -60,6 +61,54 @@ _feed_cache: dict[tuple, tuple[float, list[dict]]] = {}
 # remembered for the lifetime of the process so we don't keep paying
 # the timeout cost on every call.
 _failed_domains: set[str] = set()
+
+# ── Quality filters ──────────────────────────────────────────────
+# Patterns derived from the 2026-05-15 audit: titles matching these are
+# either pure promo / paid content, illegal Indian "sure-shot tip"
+# spam, or generic clickbait that contributes zero signal to a trading
+# decision. Listicles like "Stocks to Watch Today" are intentionally
+# NOT junk-listed because they often surface the actual reason a stock
+# is in focus that morning — the relevance filter already keeps them
+# tethered to the target ticker.
+_JUNK_PATTERNS = [
+    r"\bbuy\s+now\b", r"\bclick\s+here\b", r"subscribe\s+to",
+    r"\bwebinar\b", r"\bsponsored\b", r"\badvert",
+    r"\b(?:join|register)\s+(?:our|now|free)\b",
+    r"download\s+(?:the\s+)?app", r"limited\s+time\s+offer",
+    r"\bpenny\s+stock\b", r"\bmultibagger\b",
+    r"100%\s+returns", r"guaranteed\s+returns",
+    r"hot\s+stock\s+tip", r"sure[\s-]?shot",
+]
+_JUNK_RX = re.compile("|".join(_JUNK_PATTERNS), re.IGNORECASE)
+
+
+def _is_junk(text: str) -> bool:
+    """Return True when *text* matches any known clickbait / promo pattern."""
+    return bool(text) and bool(_JUNK_RX.search(text))
+
+
+def _is_relevant(article: dict, ticker: str) -> bool:
+    """Does the article actually mention the company in title or summary?
+
+    Google's RSS search is fuzzy and occasionally returns tangentially
+    related results (e.g. ``Dr Reddy stock`` once returned a generic
+    pharma index piece that never named the company). We require the
+    company name OR the bare ticker code to appear somewhere in the
+    title or summary so the LLM never sees off-topic articles.
+    """
+    haystack = (article.get("title", "") + " " + article.get("summary", "")).lower()
+    if not haystack.strip():
+        return False
+    name_tokens = _company_name(ticker).lower().split()
+    bare = _strip_suffix(ticker).lower()
+    # Match if the bare ticker appears OR the FIRST distinctive name
+    # token appears (covers "Dr Reddys", "Dr Reddy's" and "Dr Reddy"
+    # without forcing exact-string equality).
+    if bare in haystack:
+        return True
+    if name_tokens and name_tokens[0] in haystack:
+        return True
+    return False
 
 
 # ── Internal helpers ───────────────────────────────────────────────────
@@ -204,7 +253,23 @@ def get_news_google_rss(ticker: str, start_date: str, end_date: str) -> str:
 
     company = _company_name(ticker)
     query = f"{company} stock"
-    entries = _fetch_query(query, start_dt, end_dt)[:_PER_TICKER_ARTICLE_LIMIT]
+    raw_entries = _fetch_query(query, start_dt, end_dt)
+
+    # ── Quality filtering ────────────────────────────────────────
+    # 1) Drop articles that don't actually mention the company anywhere
+    #    (Google's fuzzy search occasionally returns sector/index pieces).
+    # 2) Drop pure promo / multibagger / paid-tip junk.
+    # 3) Cap to the newest N to keep the LLM context bounded.
+    relevant = [e for e in raw_entries if _is_relevant(e, ticker)]
+    clean = [e for e in relevant if not (_is_junk(e.get("title", "")) or _is_junk(e.get("summary", "")))]
+    entries = clean[:_PER_TICKER_ARTICLE_LIMIT]
+
+    if raw_entries:
+        logger.info(
+            "google_rss[%s]: %d raw → %d relevant → %d after junk filter → %d kept (cap %d)",
+            ticker, len(raw_entries), len(relevant), len(clean), len(entries),
+            _PER_TICKER_ARTICLE_LIMIT,
+        )
 
     header = f"## {ticker} News from Google News, from {start_date} to {end_date}:"
     if not entries:

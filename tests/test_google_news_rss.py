@@ -241,9 +241,10 @@ class TestGetNewsGoogleRSS:
         assert "No Google News found for ONGC.NS" in out
 
     def test_caps_at_per_ticker_limit(self):
-        # Generate way more than the limit
+        # Generate way more than the limit — titles must mention the ticker so
+        # they survive the new relevance filter (otherwise they'd be dropped).
         many = [{
-            "title": f"Article {i}",
+            "title": f"ONGC quarterly update #{i}",
             "summary": "",
             "link": "",
             "publisher": "Mint",
@@ -253,7 +254,68 @@ class TestGetNewsGoogleRSS:
             out = get_news_google_rss("ONGC.NS", "2026-05-08", "2026-05-15")
 
         # Only the cap's worth of "###" article markers
-        assert out.count("### Article") == gn._PER_TICKER_ARTICLE_LIMIT
+        assert out.count("### ONGC") == gn._PER_TICKER_ARTICLE_LIMIT
+
+    def test_relevance_filter_drops_off_topic_articles(self):
+        """Google occasionally returns sector pieces that don't name the company."""
+        mixed = [
+            {  # On-topic — mentions ONGC
+                "title": "ONGC wins pipeline contract",
+                "summary": "", "link": "", "publisher": "Mint",
+                "pub_date": datetime(2026, 5, 14),
+            },
+            {  # Off-topic — generic sector piece, no ticker mention
+                "title": "Indian energy sector outlook for 2026",
+                "summary": "Macro view of oil and gas demand.",
+                "link": "", "publisher": "ET",
+                "pub_date": datetime(2026, 5, 13),
+            },
+        ]
+        with patch.object(gn, "_fetch_query", return_value=mixed):
+            out = get_news_google_rss("ONGC.NS", "2026-05-08", "2026-05-15")
+
+        assert "ONGC wins pipeline contract" in out
+        assert "Indian energy sector outlook" not in out
+
+    def test_junk_filter_drops_promo_content(self):
+        """Multibagger / paid-tip / penny-stock spam must never reach the LLM."""
+        mixed = [
+            {  # Legit
+                "title": "ONGC Q4 results beat estimates",
+                "summary": "", "link": "", "publisher": "Mint",
+                "pub_date": datetime(2026, 5, 14),
+            },
+            {  # Junk — multibagger clickbait
+                "title": "ONGC: This multibagger penny stock could 10x your money",
+                "summary": "", "link": "", "publisher": "random.tips",
+                "pub_date": datetime(2026, 5, 14),
+            },
+            {  # Junk — sure-shot tip spam
+                "title": "ONGC sure-shot tip with guaranteed returns",
+                "summary": "", "link": "", "publisher": "random.tips",
+                "pub_date": datetime(2026, 5, 14),
+            },
+        ]
+        with patch.object(gn, "_fetch_query", return_value=mixed):
+            out = get_news_google_rss("ONGC.NS", "2026-05-08", "2026-05-15")
+
+        assert "ONGC Q4 results beat estimates" in out
+        assert "multibagger" not in out
+        assert "sure-shot" not in out
+
+    def test_listicles_kept_when_ticker_mentioned(self):
+        """‘Stocks to Watch Today’ daily roundups are intentionally NOT junked—
+        they often surface why a stock is in focus and the relevance filter
+        already keeps them tied to the actual ticker."""
+        listicle = [{
+            "title": "Stocks to Watch Today: Bharti Airtel, HAL, Tata Motors and more",
+            "summary": "", "link": "", "publisher": "Mint",
+            "pub_date": datetime(2026, 5, 14),
+        }]
+        with patch.object(gn, "_fetch_query", return_value=listicle):
+            out = get_news_google_rss("BHARTIARTL.NS", "2026-05-08", "2026-05-15")
+
+        assert "Stocks to Watch" in out
 
 
 class TestGetGlobalNewsGoogleRSS:

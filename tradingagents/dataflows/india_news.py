@@ -34,15 +34,22 @@ _failed_domains: set[str] = set()
 _FEED_CACHE_TTL_SECS: int = 15 * 60
 _feed_cache: dict[tuple, tuple[float, list[dict]]] = {}
 
+# Audit (2026-05-15): on Walmart corp VPN, Economic Times and Moneycontrol
+# RSS endpoints are firewalled — every request times out and we waste ~10s
+# per feed before falling back. The 6-feed legacy default returned ZERO
+# ticker-relevant articles across a 7-ticker / 7-day audit. We now keep
+# only LiveMint by default (the one feed that actually responds on VPN);
+# operators on open networks can re-enable ET / Moneycontrol via their
+# own config if those work for them.
+#
+# Even on open networks LiveMint headlines rarely match individual
+# tickers, so india_rss is best treated as a *macro* news source
+# (get_global_news_india_rss) rather than a per-ticker workhorse.
 _MARKET_FEEDS: list[str] = [
-    "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
-    "https://www.moneycontrol.com/rss/marketreports.xml",
     "https://www.livemint.com/rss/markets",
 ]
 
 _ECONOMY_FEEDS: list[str] = [
-    "https://economictimes.indiatimes.com/news/economy/rssfeeds/1373380680.cms",
-    "https://www.moneycontrol.com/rss/business.xml",
     "https://www.livemint.com/rss/economy",
 ]
 
@@ -57,19 +64,39 @@ _BROWSER_UA: str = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
-# Ticker → human-readable company name (top NSE/BSE stocks)
+# Ticker → human-readable company name (full NIFTY 50 + JIOFIN).
+# These names are used both as headline-match keywords for india_rss
+# AND as the search query for google_rss. For tickers where the bare
+# code matches (TCS, ITC, ONGC, NTPC) we keep the short form so Google
+# returns financial coverage instead of namesakes; for ambiguous tickers
+# (DRREDDY, JIOFIN, M&M) we use the full corporate name so the search
+# query is unambiguous and the relevance filter has something concrete
+# to match against.
 _TICKER_NAME_MAP: dict[str, str] = {
+    # Tier 1 — mega-caps
     "RELIANCE": "Reliance", "TCS": "TCS", "HDFCBANK": "HDFC Bank",
     "INFY": "Infosys", "ICICIBANK": "ICICI Bank", "HINDUNILVR": "Hindustan Unilever",
     "BHARTIARTL": "Bharti Airtel", "SBIN": "SBI", "BAJFINANCE": "Bajaj Finance",
-    "ITC": "ITC", "KOTAKBANK": "Kotak Mahindra Bank", "LT": "L&T",
+    "ITC": "ITC", "KOTAKBANK": "Kotak Mahindra Bank", "LT": "Larsen Toubro",
     "AXISBANK": "Axis Bank", "HCLTECH": "HCL Tech", "WIPRO": "Wipro",
     "MARUTI": "Maruti Suzuki", "TATAMOTORS": "Tata Motors", "TATASTEEL": "Tata Steel",
     "SUNPHARMA": "Sun Pharma", "ONGC": "ONGC", "NTPC": "NTPC",
     "POWERGRID": "Power Grid", "ADANIENT": "Adani Enterprises",
     "ADANIPORTS": "Adani Ports", "ULTRACEMCO": "UltraTech Cement",
-    "TECHM": "Tech Mahindra", "TITAN": "Titan", "ASIANPAINT": "Asian Paints",
+    "TECHM": "Tech Mahindra", "TITAN": "Titan Company", "ASIANPAINT": "Asian Paints",
     "NESTLEIND": "Nestle India", "JSWSTEEL": "JSW Steel",
+    # Tier 2 — the rest of NIFTY 50 + ETERNAL/JIOFIN (added 2025/2026 inclusion)
+    "BAJAJFINSV": "Bajaj Finserv", "BAJAJ-AUTO": "Bajaj Auto",
+    "DRREDDY": "Dr Reddys Laboratories",  # Use full official name
+    "CIPLA": "Cipla", "COALINDIA": "Coal India", "EICHERMOT": "Eicher Motors",
+    "GRASIM": "Grasim Industries", "DIVISLAB": "Divis Laboratories",
+    "APOLLOHOSP": "Apollo Hospitals", "HEROMOTOCO": "Hero MotoCorp",
+    "BPCL": "BPCL", "TATACONSUM": "Tata Consumer Products",
+    "BRITANNIA": "Britannia Industries", "HINDALCO": "Hindalco",
+    "INDUSINDBK": "IndusInd Bank", "SBILIFE": "SBI Life Insurance",
+    "HDFCLIFE": "HDFC Life Insurance", "M&M": "Mahindra Mahindra",
+    "SHRIRAMFIN": "Shriram Finance", "TRENT": "Trent",
+    "JIOFIN": "Jio Financial Services", "ETERNAL": "Eternal",  # parent of Zomato
 }
 
 
