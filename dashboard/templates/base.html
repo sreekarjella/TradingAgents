@@ -305,6 +305,85 @@
       localStorage.setItem('theme', html.classList.contains('dark') ? 'dark' : 'light');
       setTimeout(() => html.classList.remove('transitioning'), 250);
     }
+
+    /* ── Portfolio allocation chart ────────────────────────
+     * Why this lives in base.html and not in the swapped partial:
+     *
+     * HTMX evaluates inline <script> in swapped content SYNCHRONOUSLY,
+     * before the browser has done a layout pass on the new DOM. If we
+     * `new Chart(...)` at that moment, Chart.js measures the canvas
+     * with stale dimensions and bakes them in. Its ResizeObserver
+     * later fires `chart.resize()`, which clears the bitmap — and
+     * with `animation: { duration: 0 }` no redraw is scheduled, so
+     * the canvas stays blank. Diagnosis credit: qa-kitten 🐱.
+     *
+     * Solution: register the listener once on the body, listen for
+     * `htmx:afterSettle` (fires AFTER layout has happened, exactly
+     * what we need), and re-init the chart whenever a swap brings
+     * the canvas back in. Partial just embeds the data as JSON.
+     */
+    function initAllocationChart() {
+      const canvas = document.getElementById('allocationChart');
+      const dataEl = document.getElementById('allocationChartData');
+      if (!canvas || !dataEl || typeof Chart === 'undefined') return;
+
+      Chart.getChart(canvas)?.destroy();
+
+      let payload;
+      try {
+        payload = JSON.parse(dataEl.textContent);
+      } catch (e) {
+        console.warn('allocation chart: bad JSON payload', e);
+        return;
+      }
+
+      const COLORS = [
+        '#0053e2', '#ffc220', '#2a8703', '#ea1100', '#995213',
+        '#6366f1', '#ec4899', '#14b8a6', '#f97316', '#8b5cf6',
+        '#d1d1d1'
+      ];
+      const isDark = document.documentElement.classList.contains('dark');
+
+      new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels: payload.labels,
+          datasets: [{
+            data: payload.data,
+            backgroundColor: COLORS.slice(0, payload.labels.length),
+            borderWidth: 2,
+            borderColor: isDark ? '#1e1e1e' : '#fff',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '60%',
+          animation: { duration: 0 },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.label}: ${ctx.parsed.toFixed(1)}%`
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Initial page load (full GET /portfolio).
+    document.addEventListener('DOMContentLoaded', initAllocationChart);
+
+    // After every HTMX swap, re-init iff the canvas was part of the
+    // newly-inserted DOM. afterSettle fires post-layout, which avoids
+    // the sync-init race that wiped the bitmap on previous attempts.
+    document.body.addEventListener('htmx:afterSettle', function (evt) {
+      const target = evt.detail && evt.detail.target;
+      if (target && target.querySelector && target.querySelector('#allocationChart')) {
+        initAllocationChart();
+      }
+    });
   </script>
   {% block scripts %}{% endblock %}
 </body>
