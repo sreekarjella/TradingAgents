@@ -48,11 +48,13 @@ from .signal_processing import SignalProcessor
 class TradingAgentsGraph:
     """Main class that orchestrates the trading agents framework."""
 
+    _DEFAULT_ANALYSTS = ("market", "social", "news", "fundamentals")
+
     def __init__(
         self,
-        selected_analysts=["market", "social", "news", "fundamentals"],
-        debug=False,
-        config: Dict[str, Any] = None,
+        selected_analysts: Optional[List[str]] = None,
+        debug: bool = False,
+        config: Optional[Dict[str, Any]] = None,
         callbacks: Optional[List] = None,
     ):
         """Initialize the trading agents graph and components.
@@ -66,6 +68,10 @@ class TradingAgentsGraph:
         self.debug = debug
         self.config = config or DEFAULT_CONFIG
         self.callbacks = callbacks or []
+        # Mutable-default-arg trap: keep the API ergonomic for callers but
+        # don't share a single list across all instances.
+        if selected_analysts is None:
+            selected_analysts = list(self._DEFAULT_ANALYSTS)
 
         # Update the interface's config
         set_config(self.config)
@@ -142,7 +148,12 @@ class TradingAgentsGraph:
 
         # Set up the graph: keep the workflow for recompilation with a checkpointer.
         self.workflow = self.graph_setup.setup_graph(selected_analysts)
-        self.graph = self.workflow.compile()
+        # Cache the no-checkpointer compile once — propagate() reuses it for
+        # every ticker that doesn't use checkpointing, and we restore back to
+        # this same compiled graph after a checkpointed run finishes (instead
+        # of re-compiling from scratch each time).
+        self._base_graph = self.workflow.compile()
+        self.graph = self._base_graph
         self._checkpointer_ctx = None
 
     def _get_provider_kwargs(self) -> Dict[str, Any]:
@@ -365,7 +376,9 @@ class TradingAgentsGraph:
             if self._checkpointer_ctx is not None:
                 self._checkpointer_ctx.__exit__(None, None, None)
                 self._checkpointer_ctx = None
-                self.graph = self.workflow.compile()
+                # Restore the cached no-checkpointer compile instead of
+                # paying for a fresh workflow.compile() on every ticker.
+                self.graph = self._base_graph
 
     def _run_graph(self, company_name, trade_date):
         """Execute the graph and write the resulting state to disk and memory log."""
