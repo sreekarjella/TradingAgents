@@ -56,6 +56,10 @@ _DEFAULTS: dict[str, Any] = {
         # Ollama context window (tokens). 0 = use server default; any
         # positive int is forwarded as options.num_ctx on every request.
         "ollama_num_ctx": 32768,
+        # Ollama keep_alive duration. "30m" prevents 14b→32b reload tax
+        # between debate phases. Set empty string to defer to Ollama's
+        # default (5 min).
+        "ollama_keep_alive": "30m",
     },
     "market": {
         "benchmark_ticker": "^NSEI",
@@ -359,6 +363,11 @@ class TradingConfig:
             # any positive int is forwarded as options.num_ctx.
             "ollama_num_ctx": (
                 self._raw["llm"].get("ollama_num_ctx") or None
+            ),
+            # Ollama keep_alive (e.g. "30m", "-1" for forever, "0" to
+            # immediately unload). None = Ollama's default (5m).
+            "ollama_keep_alive": (
+                self._raw["llm"].get("ollama_keep_alive") or None
             ),
             # Pipeline
             "max_debate_rounds": pipeline["max_debate_rounds"],

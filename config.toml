@@ -52,6 +52,16 @@ anthropic_effort = ""              # Options: high, medium, low
 # Set to 0 to use Ollama's own default (which varies by version).
 ollama_num_ctx = 32768
 
+# How long Ollama should keep a model loaded in VRAM after a request.
+# Default Ollama behaviour (5m) causes 14b→32b model swapping between
+# debate phases, adding ~30s/call × 12-15 calls/ticker = ~5-7 min wasted
+# per ticker. Recommended values:
+#   "30m"   Recommended. Covers a full multi-ticker daily run.
+#   "-1"    Forever (until Ollama restart). Use if you have plenty of VRAM.
+#   "5m"    Ollama's default. Don't use this for our pipeline.
+#   ""      Empty string = defer to Ollama's default (not recommended).
+ollama_keep_alive = "30m"
+
 
 # ── Market ──────────────────────────────────────────────────────────────
 # Defines which market you're trading and how agents understand it.

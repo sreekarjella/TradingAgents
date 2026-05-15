@@ -30,6 +30,12 @@ DEFAULT_CONFIG = {
     # Sized so the full pipeline (~50-80K accumulated state) fits without
     # silent truncation. See config.toml for the sizing guide.
     "ollama_num_ctx": 32768,
+    # Ollama keep_alive duration. Default Ollama behaviour unloads models
+    # after 5 min of inactivity; in our multi-agent pipeline this triggers
+    # painful 14b→32b reloads (~30s each) between debate phases. "30m"
+    # comfortably covers a full ticker run; use "-1" to keep loaded
+    # forever, or None to defer to Ollama's default.
+    "ollama_keep_alive": "30m",
     # Checkpoint/resume: when True, LangGraph saves state after each node
     # so a crashed run can resume from the last successful step.
     "checkpoint_enabled": False,

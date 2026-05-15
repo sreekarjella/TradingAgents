@@ -183,6 +183,13 @@ class TradingAgentsGraph:
             num_ctx = self.config.get("ollama_num_ctx")
             if num_ctx:
                 kwargs["num_ctx"] = num_ctx
+            # keep_alive prevents Ollama from unloading the model
+            # between calls. Without this (default 5min), multi-agent
+            # debate phases trigger painful 14b→32b swaps that add
+            # ~30s/call. "30m" comfortably covers a full ticker run.
+            keep_alive = self.config.get("ollama_keep_alive")
+            if keep_alive:
+                kwargs["keep_alive"] = keep_alive
 
         return kwargs
 

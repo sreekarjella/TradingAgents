@@ -126,11 +126,36 @@ class TraderProposal(BaseModel):
     )
     entry_price: Optional[float] = Field(
         default=None,
-        description="Optional entry price target in the instrument's quote currency.",
+        description=(
+            "Entry price target in the instrument's quote currency. "
+            "REQUIRED for Buy/Sell actions; omit only for Hold."
+        ),
     )
     stop_loss: Optional[float] = Field(
         default=None,
-        description="Optional stop-loss price in the instrument's quote currency.",
+        description=(
+            "Stop-loss price in the instrument's quote currency. "
+            "REQUIRED for Buy/Sell actions. For Buy: stop must be BELOW entry. "
+            "For Sell (short): stop must be ABOVE entry."
+        ),
+    )
+    take_profit: Optional[float] = Field(
+        default=None,
+        description=(
+            "Take-profit / price target in the instrument's quote currency. "
+            "REQUIRED for Buy/Sell actions. For Buy: target must be ABOVE entry. "
+            "For Sell (short): target must be BELOW entry. Used to compute "
+            "risk-reward ratio."
+        ),
+    )
+    risk_reward_ratio: Optional[float] = Field(
+        default=None,
+        description=(
+            "Risk-reward ratio: |take_profit - entry_price| / |entry_price - stop_loss|. "
+            "A ratio of 2.0 means potential reward is 2x the potential loss. "
+            "Reputable trading desks reject trades with R:R < 1.5 unless there is a "
+            "compelling thesis. Compute and report this honestly even if unfavourable."
+        ),
     )
     position_sizing: Optional[str] = Field(
         default=None,
@@ -154,6 +179,10 @@ def render_trader_proposal(proposal: TraderProposal) -> str:
         parts.extend(["", f"**Entry Price**: {proposal.entry_price}"])
     if proposal.stop_loss is not None:
         parts.extend(["", f"**Stop Loss**: {proposal.stop_loss}"])
+    if proposal.take_profit is not None:
+        parts.extend(["", f"**Take Profit**: {proposal.take_profit}"])
+    if proposal.risk_reward_ratio is not None:
+        parts.extend(["", f"**Risk:Reward**: {proposal.risk_reward_ratio:.2f}"])
     if proposal.position_sizing:
         parts.extend(["", f"**Position Sizing**: {proposal.position_sizing}"])
     parts.extend([
@@ -198,11 +227,29 @@ class PortfolioDecision(BaseModel):
     )
     price_target: Optional[float] = Field(
         default=None,
-        description="Optional target price in the instrument's quote currency.",
+        description=(
+            "Target price in the instrument's quote currency. REQUIRED for any "
+            "actionable rating (Buy/Overweight: target must be ABOVE current price; "
+            "Sell/Underweight: target must be BELOW). Hold may omit it. Without a "
+            "target the trader cannot size or compute risk-reward."
+        ),
+    )
+    stop_loss: Optional[float] = Field(
+        default=None,
+        description=(
+            "Stop-loss / risk-cap price in the instrument's quote currency. "
+            "REQUIRED for any actionable rating. The implied R:R (target vs stop "
+            "vs entry) should be at least 1.5; if not, justify why or downgrade "
+            "the rating to Hold."
+        ),
     )
     time_horizon: Optional[str] = Field(
         default=None,
-        description="Optional recommended holding period, e.g. '3-6 months'.",
+        description=(
+            "Recommended holding period, e.g. '3-6 months', '12-18 months'. "
+            "REQUIRED for any actionable rating so position monitoring has a clear "
+            "review cadence."
+        ),
     )
 
 
@@ -223,6 +270,8 @@ def render_pm_decision(decision: PortfolioDecision) -> str:
     ]
     if decision.price_target is not None:
         parts.extend(["", f"**Price Target**: {decision.price_target}"])
+    if decision.stop_loss is not None:
+        parts.extend(["", f"**Stop Loss**: {decision.stop_loss}"])
     if decision.time_horizon:
         parts.extend(["", f"**Time Horizon**: {decision.time_horizon}"])
     return "\n".join(parts)

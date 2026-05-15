@@ -263,6 +263,15 @@ class OpenAIClient(BaseLLMClient):
                 options = dict(extra_body.get("options", {}))
                 options.setdefault("num_ctx", num_ctx)
                 extra_body["options"] = options
+            # keep_alive controls how long Ollama holds a model in VRAM
+            # after a request. Default (5 min) causes painful 14b→32b
+            # swapping during multi-agent debate. Setting 30m (or longer)
+            # eliminates the reload tax. Passed as a top-level field per
+            # Ollama's /api/chat schema; OpenAI-compat forwards it via
+            # extra_body.
+            keep_alive = self.kwargs.get("keep_alive")
+            if keep_alive:
+                extra_body.setdefault("keep_alive", keep_alive)
             llm_kwargs["extra_body"] = extra_body
             # Users can override extra_body via model_kwargs to disable
             # thinking for a specific run (e.g. latency-sensitive tests).

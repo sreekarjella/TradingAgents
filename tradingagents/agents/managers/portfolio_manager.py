@@ -52,6 +52,15 @@ def create_portfolio_manager(llm):
 - **Underweight**: Reduce exposure, take partial profits
 - **Sell**: Exit position or avoid entry
 
+**Required fields for any actionable rating** (Buy / Overweight / Underweight / Sell):
+- `price_target`: a concrete number in the instrument's quote currency
+- `stop_loss`: a concrete risk-cap number; the implied risk vs reward should be at least 1:1.5
+- `time_horizon`: a concrete review window, e.g. "3-6 months"
+
+Hold may omit the numeric fields if the thesis genuinely is wait-and-see.
+Do NOT issue an actionable rating without these numbers \u2014 if you cannot
+name them confidently, downgrade to Hold and explain why in the thesis.
+
 **Context:**
 - Research Manager's investment plan: **{research_plan}**
 - Trader's transaction proposal: **{trader_plan}**
