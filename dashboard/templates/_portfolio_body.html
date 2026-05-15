@@ -1,0 +1,219 @@
+{# Portfolio body partial — rendered both as part of portfolio.html and standalone
+   by the /api/portfolio/refresh endpoint so HTMX can swap the live-priced
+   version in without a full page reload. Keep this self-contained: the
+   wrapping div + chart-init script live here so HTMX picks them up. #}
+<div id="portfolio-body" class="space-y-6">
+
+  {# ── Live-data status badge ────────────────────────────────────────── #}
+  {% if refreshed_at %}
+    {% if prices_are_live %}
+      <div role="status"
+           class="flex items-center gap-2 px-3 py-2 rounded-md text-sm
+                  bg-green-50 dark:bg-green-900/20
+                  border border-green-200 dark:border-green-800
+                  text-green-800 dark:text-green-300">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M5 13l4 4L19 7"/>
+        </svg>
+        <span>
+          Live prices loaded for {{ live_count }}/{{ total_count }} holdings
+          <span class="text-xs opacity-75">· refreshed at {{ refreshed_at }}</span>
+        </span>
+      </div>
+    {% else %}
+      <div role="status"
+           class="flex items-center gap-2 px-3 py-2 rounded-md text-sm
+                  bg-spark-10 dark:bg-yellow-900/20
+                  border border-yellow-200 dark:border-yellow-800
+                  text-spark-140 dark:text-yellow-300">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span>
+          Couldn't reach Yahoo Finance — showing last filled-order prices
+          <span class="text-xs opacity-75">· tried at {{ refreshed_at }}</span>
+        </span>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  {# ── Summary cards ────────────────────────────────────────────────── #}
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Total Value</div>
+      <div class="text-xl font-bold text-wm-text dark:text-dark-text">{{ header.total_value | fmt_inr }}</div>
+    </div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Cash</div>
+      <div class="text-xl font-bold text-wm-blue">{{ header.cash | fmt_inr }}</div>
+    </div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Invested</div>
+      <div class="text-xl font-bold text-wm-text dark:text-dark-text">{{ header.invested | fmt_inr }}</div>
+    </div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Unrealized P&amp;L</div>
+      <div class="text-xl font-bold {{ header.total_pnl | pnl_color }}">
+        {{ header.total_pnl | fmt_inr }}
+      </div>
+    </div>
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-4">
+      <div class="text-xs text-gray-500 dark:text-dark-muted uppercase tracking-wider mb-1">Day's Change</div>
+      <div class="text-xl font-bold {{ header.total_pnl | pnl_color }}">
+        {{ header.total_pnl_pct | fmt_pct }}
+      </div>
+    </div>
+  </div>
+
+  {% if holdings | length == 0 %}
+  {# ── Empty state ─────────────────────────────────────────────────── #}
+  <div class="flex flex-col items-center justify-center py-16 text-center">
+    <div class="w-16 h-16 rounded-full bg-wm-subtle dark:bg-dark-raised flex items-center justify-center mb-4">
+      <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M3 10h4v11H3zM10 3h4v18h-4zM17 7h4v14h-4z"/>
+      </svg>
+    </div>
+    <h2 class="text-lg font-semibold text-wm-text dark:text-dark-text mb-1">No holdings yet</h2>
+    <p class="text-sm text-gray-500 dark:text-dark-muted">Run the pipeline to start building your portfolio.</p>
+  </div>
+
+  {% else %}
+
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+    {# ── Holdings table (2/3 width) ─────────────────────────────────── #}
+    <div class="xl:col-span-2 bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg overflow-hidden">
+      <div class="px-5 py-3 border-b border-wm-border dark:border-dark-border">
+        <h2 class="text-base font-semibold text-wm-text dark:text-dark-text">Holdings</h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm stripe-table" role="table">
+          <thead>
+            <tr class="bg-wm-subtle dark:bg-dark-raised text-left text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">
+              <th class="px-5 py-3" scope="col">Ticker</th>
+              <th class="px-5 py-3 text-right" scope="col">Qty</th>
+              <th class="px-5 py-3 text-right" scope="col">Avg Price</th>
+              <th class="px-5 py-3 text-right" scope="col">LTP</th>
+              <th class="px-5 py-3 text-right" scope="col">Current Value</th>
+              <th class="px-5 py-3 text-right" scope="col">P&amp;L</th>
+              <th class="px-5 py-3 text-right" scope="col">P&amp;L %</th>
+              <th class="px-5 py-3 text-right" scope="col">Alloc %</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-wm-border dark:divide-dark-border">
+            {% for h in holdings %}
+            <tr class="hover:bg-blue-50/40 dark:hover:bg-blue-900/20 transition">
+              <td class="px-5 py-3 font-semibold text-wm-text dark:text-dark-text">
+                {{ h.ticker.replace('.NS','') }}
+                <span class="text-[10px] text-gray-400 dark:text-dark-muted font-normal ml-1">NSE</span>
+              </td>
+              <td class="px-5 py-3 text-right font-mono">{{ h.quantity }}</td>
+              <td class="px-5 py-3 text-right font-mono">{{ "%.2f" | format(h.avg_price) }}</td>
+              <td class="px-5 py-3 text-right font-mono">{{ "%.2f" | format(h.ltp) }}</td>
+              <td class="px-5 py-3 text-right font-mono font-medium">{{ h.current_value | fmt_inr }}</td>
+              <td class="px-5 py-3 text-right font-mono font-medium {{ h.pnl | pnl_color }}">
+                {{ h.pnl | fmt_inr }}
+              </td>
+              <td class="px-5 py-3 text-right font-mono {{ h.pnl | pnl_color }}">
+                {{ h.pnl_pct | fmt_pct }}
+              </td>
+              <td class="px-5 py-3 text-right font-mono text-gray-500 dark:text-dark-muted">
+                {{ "%.1f" | format(h.allocation) }}%
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# ── Allocation pie chart (1/3 width) ───────────────────────────── #}
+    <div class="bg-white dark:bg-dark-card border border-wm-border dark:border-dark-border rounded-lg p-5">
+      <h2 class="text-base font-semibold text-wm-text dark:text-dark-text mb-4">Allocation</h2>
+      <div style="height: 300px; position: relative;">
+        <canvas id="allocationChart"></canvas>
+      </div>
+      {# Legend below #}
+      <div class="mt-4 space-y-1">
+        {% for h in holdings %}
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-medium">{{ h.ticker.replace('.NS','') }}</span>
+          <span class="text-gray-500 dark:text-dark-muted">{{ "%.1f" | format(h.allocation) }}%</span>
+        </div>
+        {% endfor %}
+        {% if header.cash > 0 %}
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-medium">Cash</span>
+          <span class="text-gray-500 dark:text-dark-muted">{{ "%.1f" | format(header.cash / header.total_value * 100) }}%</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Chart init (runs on initial page load AND after HTMX swap) ──── #}
+  {#
+    Important: HTMX evaluates inline <script> in swapped content, but
+    DOMContentLoaded won't fire. So we run the init immediately and
+    destroy any pre-existing chart instance bound to this canvas (the
+    one from the previous render) before drawing the new one. Without
+    the destroy() call Chart.js complains: "Canvas is already in use".
+  #}
+  <script>
+    (function () {
+      const canvas = document.getElementById('allocationChart');
+      if (!canvas || typeof Chart === 'undefined') return;
+
+      const existing = Chart.getChart(canvas);
+      if (existing) existing.destroy();
+
+      const labels = [
+        {% for h in holdings %}'{{ h.ticker.replace(".NS","") }}',{% endfor %}
+        {% if header.cash > 0 %}'Cash'{% endif %}
+      ];
+      const data = [
+        {% for h in holdings %}{{ "%.2f" | format(h.allocation) }},{% endfor %}
+        {% if header.cash > 0 %}{{ "%.2f" | format(header.cash / header.total_value * 100) }}{% endif %}
+      ];
+
+      const COLORS = [
+        '#0053e2', '#ffc220', '#2a8703', '#ea1100', '#995213',
+        '#6366f1', '#ec4899', '#14b8a6', '#f97316', '#8b5cf6',
+        '#d1d1d1'
+      ];
+
+      const isDark = document.documentElement.classList.contains('dark');
+
+      new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: data,
+            backgroundColor: COLORS.slice(0, labels.length),
+            borderWidth: 2,
+            borderColor: isDark ? '#1e1e1e' : '#fff',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '60%',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.label}: ${ctx.parsed.toFixed(1)}%`
+              }
+            }
+          }
+        }
+      });
+    })();
+  </script>
+
+  {% endif %}
+</div>

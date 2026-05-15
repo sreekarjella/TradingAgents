@@ -19,6 +19,8 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from pydantic import BaseModel
 
+from .live_prices import fetch_live_prices
+
 # ---------------------------------------------------------------------------
 # Path setup — DBs live at ../data/ relative to this file
 # ---------------------------------------------------------------------------
@@ -152,8 +154,90 @@ def query_one(db_path: Path, sql: str, params: tuple[Any, ...] = ()) -> dict[str
 # Shared context — header data for every page
 # ---------------------------------------------------------------------------
 
-def _header_context() -> dict[str, Any]:
-    """Portfolio summary for the sticky header."""
+def _last_order_prices(tickers: list[str]) -> dict[str, float]:
+    """Stale-but-cheap fallback: most recent FILLED order price per ticker.
+
+    Used when live yfinance data isn't available (no internet, market
+    closed, etc.). Returns ``{}`` when there are no tickers.
+    """
+    if not tickers:
+        return {}
+    placeholders = ",".join("?" * len(tickers))
+    rows = query(
+        PORTFOLIO_DB,
+        f"""
+            SELECT ticker, price
+            FROM (
+                SELECT ticker, price, created_at,
+                       ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY created_at DESC) AS rn
+                FROM orders
+                WHERE status='FILLED' AND ticker IN ({placeholders})
+            )
+            WHERE rn = 1
+        """,
+        tuple(tickers),
+    )
+    return {r["ticker"]: r["price"] for r in rows}
+
+
+def _resolve_ltp(
+    holding: dict[str, Any],
+    live_prices: dict[str, float],
+    fallback_prices: dict[str, float],
+) -> float:
+    """Pick the best available last-traded-price for *holding*.
+
+    Preference order: live (yfinance) → last filled order → cost basis.
+    Cost basis as last resort means a brand-new position with no live
+    feed shows zero P&L instead of crashing.
+    """
+    ticker = holding["ticker"]
+    return (
+        live_prices.get(ticker)
+        or fallback_prices.get(ticker)
+        or holding["avg_price"]
+    )
+
+
+def _enrich_holdings(
+    holdings: list[dict[str, Any]],
+    total_value: float,
+    live_prices: dict[str, float] | None = None,
+) -> list[dict[str, Any]]:
+    """Add ltp / current_value / pnl / pnl_pct / allocation columns.
+
+    Single source of truth for the holdings shape used by both the page
+    template and the refresh partial — the previous code duplicated this
+    logic between ``_header_context`` and ``page_portfolio``.
+    """
+    live = live_prices or {}
+    fallback = _last_order_prices([h["ticker"] for h in holdings])
+    enriched: list[dict[str, Any]] = []
+    for h in holdings:
+        ltp = _resolve_ltp(h, live, fallback)
+        current_value = h["quantity"] * ltp
+        pnl = current_value - h["invested_value"]
+        pnl_pct = (pnl / h["invested_value"] * 100) if h["invested_value"] else 0.0
+        alloc = (current_value / total_value * 100) if total_value else 0.0
+        enriched.append({
+            **h,
+            "ltp": ltp,
+            "current_value": current_value,
+            "pnl": pnl,
+            "pnl_pct": pnl_pct,
+            "allocation": alloc,
+        })
+    return enriched
+
+
+def _header_context(live_prices: dict[str, float] | None = None) -> dict[str, Any]:
+    """Portfolio summary for the sticky header.
+
+    When *live_prices* is provided (from the Refresh action), the totals
+    reflect real-time yfinance data. Otherwise we fall back to the last
+    filled order price per ticker, which is what the page has shown
+    historically.
+    """
     config_cash = query_one(PORTFOLIO_DB, "SELECT value FROM config WHERE key='cash'")
     cash = float(config_cash["value"]) if config_cash else 0.0
 
@@ -162,16 +246,11 @@ def _header_context() -> dict[str, Any]:
 
     holdings = query(PORTFOLIO_DB, "SELECT * FROM holdings WHERE quantity > 0")
 
-    # Estimate current value: use last order price per ticker as LTP proxy
-    holdings_value = 0.0
-    for h in holdings:
-        last_order = query_one(
-            PORTFOLIO_DB,
-            "SELECT price FROM orders WHERE ticker=? AND status='FILLED' ORDER BY created_at DESC LIMIT 1",
-            (h["ticker"],),
-        )
-        ltp = last_order["price"] if last_order else h["avg_price"]
-        holdings_value += h["quantity"] * ltp
+    live = live_prices or {}
+    fallback = _last_order_prices([h["ticker"] for h in holdings])
+    holdings_value = sum(
+        h["quantity"] * _resolve_ltp(h, live, fallback) for h in holdings
+    )
 
     total_value = cash + holdings_value
     invested = sum(h["invested_value"] for h in holdings)
@@ -226,35 +305,53 @@ async def page_today(request: Request) -> HTMLResponse:
 
 @app.get("/portfolio", response_class=HTMLResponse)
 async def page_portfolio(request: Request) -> HTMLResponse:
-    """Portfolio holdings and allocation."""
+    """Portfolio holdings and allocation (initial render — stale prices).
+
+    The Refresh button on the page triggers ``/api/portfolio/refresh``
+    which fetches live prices and swaps in the updated body.
+    """
     hdr = _header_context()
-    holdings = query(PORTFOLIO_DB, "SELECT * FROM holdings WHERE quantity > 0 ORDER BY invested_value DESC")
-
-    enriched: list[dict[str, Any]] = []
-    for h in holdings:
-        last_order = query_one(
-            PORTFOLIO_DB,
-            "SELECT price FROM orders WHERE ticker=? AND status='FILLED' ORDER BY created_at DESC LIMIT 1",
-            (h["ticker"],),
-        )
-        ltp = last_order["price"] if last_order else h["avg_price"]
-        current_value = h["quantity"] * ltp
-        pnl = current_value - h["invested_value"]
-        pnl_pct = (pnl / h["invested_value"] * 100) if h["invested_value"] else 0.0
-        alloc = (current_value / hdr["total_value"] * 100) if hdr["total_value"] else 0.0
-        enriched.append({
-            **h,
-            "ltp": ltp,
-            "current_value": current_value,
-            "pnl": pnl,
-            "pnl_pct": pnl_pct,
-            "allocation": alloc,
-        })
-
+    holdings = query(
+        PORTFOLIO_DB,
+        "SELECT * FROM holdings WHERE quantity > 0 ORDER BY invested_value DESC",
+    )
+    enriched = _enrich_holdings(holdings, hdr["total_value"])
     return templates.TemplateResponse(request, "portfolio.html", {
         "page": "portfolio",
         "header": hdr,
         "holdings": enriched,
+        "prices_are_live": False,
+        "refreshed_at": None,
+    })
+
+
+@app.post("/api/portfolio/refresh", response_class=HTMLResponse)
+async def api_portfolio_refresh(request: Request) -> HTMLResponse:
+    """Fetch live prices for every held ticker and re-render the body.
+
+    Returns the ``_portfolio_body.html`` partial so HTMX can swap it in
+    without a full page reload.
+    """
+    from datetime import datetime
+
+    holdings = query(
+        PORTFOLIO_DB,
+        "SELECT * FROM holdings WHERE quantity > 0 ORDER BY invested_value DESC",
+    )
+    tickers = [h["ticker"] for h in holdings]
+    live = fetch_live_prices(tickers)
+
+    hdr = _header_context(live_prices=live)
+    enriched = _enrich_holdings(holdings, hdr["total_value"], live_prices=live)
+
+    return templates.TemplateResponse(request, "_portfolio_body.html", {
+        "page": "portfolio",
+        "header": hdr,
+        "holdings": enriched,
+        "prices_are_live": bool(live),
+        "live_count": len(live),
+        "total_count": len(tickers),
+        "refreshed_at": datetime.now().strftime("%H:%M:%S"),
     })
 
 
